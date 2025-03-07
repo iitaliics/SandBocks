@@ -291,6 +291,7 @@ class Cell:
     def update_colour_from_state_change(self):
         self.colour_params = self.element.colour
         self.colour_mode = self.element.colour_mode
+        self.colour_base = self.get_base_colour()
         self.colour = self.get_base_colour()
 
     # def update_colour(self):
@@ -322,9 +323,7 @@ class Cell:
             self.colour = self.temperature_colour_mode()
         if self.state is not None:
             if hasattr(self.state, "colour"):
-                print(22, self.colour)
                 self.colour = self.state.colour(cell = self)
-                print(11111, self.colour)
 
     def temperature_colour_mode(self):
         blackbody_constant = 30
@@ -497,18 +496,23 @@ class Burning(Static):
                 grid.grid[neighbour[0]][neighbour[1]].state = burning
         
         # smoke responsibility
-        # if len(relevantFreeContact):
-        #     chosenOne = random.choice(relevantFreeContact)
-        #     if random.random() > 0.95:
-        #         grid.draw(chosenOne[0], chosenOne[1], Cell(smoke, temperature=100, fuel = max(cell.fuel / 2, 1)))
+        if len(relevantFreeContact):
+            chosenOne = random.choice(relevantFreeContact)
+            if random.random() > 0.95:
+                chosenOne[2].state = decay
+                chosenOne[2].element = smoke
+                chosenOne[2].colour_base = smoke.colour
+                chosenOne[2].update_colour_from_state_change()
+                chosenOne[2].fuel = max(cell.fuel / 2, 1)
 
-        print(cell.temperature, self.threshold)
         if cell.temperature < self.threshold:
-            print(cell.colour_base)
             cell.state = decay
             cell.element = smoke
+            cell.colour_base = smoke.colour
             cell.update_colour_from_state_change()
-
+            
+            # cell.colour_base = (254, 254, 254)
+            
         cell.fuel -= 1
         if cell.fuel <= 0:
             cell.element = air
@@ -517,8 +521,8 @@ class Burning(Static):
 
     def colour(self, cell):
         if random.random() > 0.9:
-            r = random.randint(150, 250)
-            g = random.randint(50, 150)
+            r = random.randint(150, 200)
+            g = random.randint(100, 200)
             b = random.randint(50, 150)
             return (r, g, b)
         return cell.colour
@@ -541,7 +545,7 @@ class Decay(Static):
         g = cell.colour_base[1]
         b = cell.colour_base[2]
 
-        return (int(r * cell.fuel / 100), int(g * cell.fuel / 100), int(b * cell.fuel / 100))
+        return (int(r * cell.fuel / 200), int(g * cell.fuel / 200), int(b * cell.fuel / 200))
         
 
 class Clone(Particle):
@@ -627,8 +631,8 @@ clock = pygame.time.Clock()
 grid = Grid(resolution[0], resolution[1])
     # grid.set(10, 4, water)
     #
-for x in range(15):
-    grid.draw(x, 5, Cell(fire, burning, False, 300, 100, 0, 0))
+# for x in range(15):
+    
         # grid.set(x, 3, Cell(ice, temperature=-10))
         # grid.set(x, 11, Cell(water, temperature=20))
         # grid.set(x, 4, Cell(ice, temperature=0))
@@ -661,16 +665,20 @@ grid.print()
 while not done:
     # print("--------------------------")
     
-    debug(grid)
+    # debug(grid)
 
+    grid.draw(5, 1, Cell(fire, burning, False, 300, 100, 0, 0))
                 # pass
     # grid.draw(7, 11, Cell(destruct))
 
-    # grid.draw(7, 6, Cell(grow,  life = 100, branches = 1, flammable=True, fuel=100))
+    grid.draw(7, 6, Cell(grow,  life = 100, branches = 1, flammable=True, fuel=100))
 
     # grid.draw(7, 7, Cell(burning))
 
-    # grid.draw(7, 5, Cell(clone))
+    grid.draw(7, 5, Cell(clone))
+
+
+    grid.set(0, 14, Cell(ice, temperature=-24))
         
     # grid.draw(5, 5, Cell(ice, temperature=200))
     # grid.draw(6, 5, Cell(ice, temperature=90))
