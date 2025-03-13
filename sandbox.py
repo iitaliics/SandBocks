@@ -504,6 +504,29 @@ class Grow(Updatable):
                 grid.draw(chosenOnes[0][0], chosenOnes[0][1], Cell(grow, life=cell.life - 10, branches=cell.branches, flammable=True, fuel = 100))
                 cell.life = 0
 
+class Bug(Updatable):
+    def __init__(self, name, colour, colour_mode, phase_change_temp, next_phase, thermal_conductivity):
+        super().__init__(name, colour, colour_mode, phase_change_temp, next_phase, thermal_conductivity)
+        self.default_direction = None
+
+    def do(self, grid, x, y):
+        cell = grid.get(x, y)
+        print(cell.life)
+        contact = grid.check_surroundings(x, y)
+        relevantContact = [element for element in contact if (isinstance(element[2].element, Solid) or (isinstance(element[2].element, Updatable) and element[2].direction is None))]
+        if cell.life > 0 and len(relevantContact):
+            cell.life -= 1
+            return
+
+        elif cell.life <= 0 or not len(relevantContact):
+            if random.random() > 0.6:
+                cell.life = random.randint(20, 100)
+                relevantFree = [element for element in contact if isinstance(element[2].element, Gas)]
+                if len(relevantFree):
+                    chosenOne = random.choice(relevantFree)
+                    grid.swap(x, y, chosenOne[0], chosenOne[1])
+            
+
 class Burning(Static):
     def __init__(self, name, threshold):
         super().__init__(name)
@@ -631,6 +654,9 @@ grow = Grow("Grow", (0, [150, 250], 10), (colourMode["STATIC"],), [None, 300], [
 burning = Burning("Burning", threshold=149)
 decay = Decay("Decay")
 clone = Clone("Clone", (150, 150, 0), (colourMode['SOLID'], ))
+
+bug = Bug("Bug", (150, 200, 0), (colourMode['SOLID'], ), [None, 300], [None, None], 0.6)
+
 block = Particle("Block", (100, 100, 100), (colourMode['STATIC'],))
 
 def debug(grid):
@@ -702,6 +728,11 @@ grid.print()
 # grid.set(1, 0, Cell(ice, temperature=-14))
 # grid.draw(6, 9, Cell(water, temperature=23))
 
+grid.draw(10, 22, Cell(bug))
+for _ in range(40):
+    grid.draw(_, 21, Cell(ice, None, False, -2003))
+
+
 count = 0
 
 while not done:
@@ -723,9 +754,9 @@ while not done:
 
     
     # grid.draw(10, 25, Cell(water, temperature=102))
-    grid.draw(5, 22, Cell(water, temperature=23.5))
-    grid.draw(6, 22, Cell(water, temperature=23.5))
-    grid.draw(7, 22, Cell(water, temperature=23.5))
+    # grid.draw(5, 22, Cell(water, temperature=23.5))
+    # grid.draw(6, 22, Cell(water, temperature=23.5))
+    # grid.draw(7, 22, Cell(water, temperature=23.5))
 
 
     # cell = grid.get(5, 5)
@@ -745,7 +776,7 @@ while not done:
     # grid.draw(7, 5, Cell(ice, temperature=100))
     # grid.draw(1, 14, Cell(sand, temperature=40))
     
-    grid.draw(35, 7, Cell(lava, temperature=1900))
+    # grid.draw(35, 7, Cell(lava, temperature=1900))
     # grid.print()
     # grid.draw(2, 14, Cell(water, temperature=23))
     # grid.set(1, 3, Cell(ice, direction=None, temperature=-1))
