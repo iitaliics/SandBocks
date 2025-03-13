@@ -67,9 +67,13 @@ class Grid:
         element1 = self.get(x1, y1)
         element2 = self.get(x2, y2)
         if isinstance(element2.element, Updatable) and hasattr(element2.element, "density") and element2.direction is not None:
-            if element1.direction == True and element1.element.density > element2.element.density:
+            if not element1.direction == element2.direction:
+                if element1.direction == False:
+                    return False
                 return True
-            if element1.direction == False and element1.element.density < element2.element.density:
+            elif element1.direction == True and element1.element.density > element2.element.density:
+                return True
+            elif element1.direction == False and element1.element.density < element2.element.density:
                 return True
         return False
 
@@ -114,8 +118,11 @@ class Grid:
                     break
                 if not current_layer_left_gap:
                     break
-        if left == 0 and current_layer_left_gap:
-            left = grid.width
+                if current_layer_left_gap:
+                    left = (i + 1)
+        
+        # if left == 0 and current_layer_left_gap:
+        #     left = grid.width
         # right side
         right = 0
         # 0 means it cannot move in that direction
@@ -127,10 +134,16 @@ class Grid:
                 if next_layer_right_gap and current_layer_right_gap:
                     right = i
                     break
-                if not current_layer_left_gap:
+                if not current_layer_right_gap:
                     break
+                if current_layer_right_gap:
+                    right = i
         if right == 0 and current_layer_right_gap:
             right = grid.width
+
+        if x == 38 and y == 1:
+            print(1, left, right)
+
         return [left, right]
 
     def can_swap_after_random(self, x1, y1, x2, y2):
@@ -152,7 +165,7 @@ class Grid:
                     changes.append((column, row, self.get_new_temperature_difference(column, row)))
             else:
                 for column in range(grid.width):
-                    changes.append((column, row, self.get_new_temperature_difference(grid.width - column - 1, row)))
+                    changes.append((grid.width - column - 1, row, self.get_new_temperature_difference(grid.width - column - 1, row)))
         return changes
 
     def get_new_temperature_difference(self, x, y):
@@ -203,21 +216,6 @@ class Grid:
                         changes.append((grid.width - 1 - column, row, pixel))
         return changes
 
-    def get_static(self):
-        changes = []
-        for row in range(grid.height):
-            if random.random() < 0.5:
-                for column in range(grid.width):
-                    pixel = grid.get(column, row)
-                    if pixel.direction is None:
-                        changes.append((column, row, pixel))
-            else:
-                for column in range(grid.width):
-                    pixel = grid.get(grid.width - 1 - column, row)
-                    if pixel.direction is None:
-                        changes.append((grid.width - 1 - column, row, pixel))
-        return changes
-
     def perform_pixel_behaviour(self, temperature_data=None):
         for entry in temperature_data:
             # print(self.get(entry[0], entry[1]).__dict__, (entry[0], entry[1]))
@@ -231,55 +229,19 @@ class Grid:
                 update_pixel.element.do(self, entry[0], entry[1])
                 update_pixel.update_colour()
 
-            # print(self.get(entry[0], entry[1]).__dict__, (entry[0], entry[1]), entry[2])
-        static_update = self.get_static()
-        for column, row, current in static_update:
-            if not current.state == None:
-                if hasattr(current.state, 'do'):
-                    current.state.do(self, column, row)
-            
-            if not temperature_data == None:
-                # current.temperature = temperature_data[column][row]
-                if hasattr(current.element, 'do'):
-                    # includes updating the colour, material state, performing special behaviours and updating internal attributes such as decay or fuel
-                    current.element.do(self, column, row)
-                    current.update_colour()
-
         up_update = self.get_upmoving()
         for column, row, current in up_update:
-            # if not current.state == None:
-            #     if hasattr(current.state, 'do'):
-            #         current.state.do(self, column, row)
-            # #
-            # if not temperature_data == None:
-            #     # current.temperature = temperature_data[column][row]
-            #     if hasattr(current.element, 'do'):
-            #         # includes updating the colour, material state, performing special behaviours and updating internal attributes such as decay or fuel
-            #         current.element.do(self, column, row)
-            #         current.update_colour()
-
-                if hasattr(current.element, 'move'):
-                    # includes moving the pixel in the direction specified in the class
-                    current.element.move(self, column, row)
+            if hasattr(current.element, 'move'):
+                # includes moving the pixel in the direction specified in the class
+                current.element.move(self, column, row)
 
         down_update = self.get_downmoving()
         for column, row, current in down_update:
-            # if not current.state == None:
-            #     if hasattr(current.state, 'do'):
-            #         current.state.do(self, column, row)
-            # #
-            # if not temperature_data == None:
-            #     # current.temperature = temperature_data[column][row]
-            #     if hasattr(current.element, 'do'):
-            #         # includes updating the colour, material state, performing special behaviours and updating internal attributes such as decay or fuel
-            #         current.element.do(self, column, row)
-            #         current.update_colour()
+            if hasattr(current.element, 'move'):
+                # includes moving the pixel in the direction specified in the class
+                current.element.move(self, column, row)
 
-                if hasattr(current.element, 'move'):
-                    # includes moving the pixel in the direction specified in the class
-                    current.element.move(self, column, row)
-
-colourMode = {"SOLID": 0, "STATIC": 1, "NOISE": 2, "TEMPERATURE": 3, "RAMP_UP": 4, "RAMP_DOWN": 5, }
+colourMode = {"SOLID": 0, "STATIC": 1, "NOISE": 2, "TEMPERATURE_DOWN": 3, "TEMPERATURE_UP": 4, "BLACKBODY": 5}
 
 class Cell:
     def __init__(self, element, state=None, flammable=False, temperature=23.0, fuel=0, life=0, branches=0):
@@ -330,13 +292,38 @@ class Cell:
         
         if colourMode['NOISE'] in self.colour_mode and random.random() > 0.95:
             self.colour = self.get_base_colour()
-        if colourMode['TEMPERATURE'] in self.colour_mode:
-            self.colour = self.temperature_colour_mode()
+        if colourMode['TEMPERATURE_DOWN'] in self.colour_mode:
+            self.colour = self.temperature_down_colour_mode()
+        if colourMode['TEMPERATURE_UP'] in self.colour_mode:
+            self.colour = self.temperature_up_colour_mode()
+        if colourMode['BLACKBODY'] in self.colour_mode:
+            self.colour = self.blackbody_colour_mode()
         if self.state is not None:
             if hasattr(self.state, "colour"):
                 self.colour = self.state.colour(cell = self)
 
-    def temperature_colour_mode(self):
+
+    def temperature_down_colour_mode(self):
+        if self.element.next_phase[0] is not None and self.element.next_phase[1] is not None:
+            ratio =  (self.temperature - self.element.phase_change_temp[0]) / (0.5 * self.element.phase_change_temp[1] - self.element.phase_change_temp[0])
+        elif self.element.next_phase[0] is not None:
+            ratio = 1.5 - (self.element.phase_change_temp[0] / self.temperature)
+        else:
+            ratio = 1
+
+        r = self.colour_base[0]
+        g = self.colour_base[1]
+        b = self.colour_base[2]
+
+
+        r = int(min(max((r * ratio), 0), 254))
+        g = int(min(max((g * ratio), 0), 254))
+        b = int(min(max((b * ratio), 0), 254))
+
+        return (r, g, b)
+
+
+    def blackbody_colour_mode(self):
         blackbody_constant = 30
         r = self.colour_base[0]
         g = self.colour_base[1]
@@ -376,12 +363,12 @@ class Updatable(Particle):
         current_temp = cell.temperature
         if cell.element.next_phase[0] is not None and current_temp < cell.element.phase_change_temp[0]:
             # cell.temperature = cell.element.phase_change_temp[0] - 1
-            print(1, cell.__dict__)
+            # print(1, cell.__dict__)
 
             cell.element = cell.element.next_phase[0]
             cell.direction = cell.element.default_direction
             cell.update_colour_from_state_change()
-            print(2222, cell.__dict__)
+            # print(2222, cell.__dict__)
 
             return
 
@@ -402,8 +389,8 @@ class Solid(Updatable):
         self.density = density
         self.default_direction = default_direction
 
-    def do(self, grid, x, y):
-        super().do(grid, x, y)
+    # def do(self, grid, x, y):
+        # super().do(grid, x, y)
         # self.move(grid, x, y)
 
     def move(self, grid, x, y):
@@ -419,8 +406,8 @@ class Liquid(Updatable):
         self.density = density
         self.default_direction = default_direction
 
-    def do(self, grid, x, y):
-        super().do(grid, x, y)
+    # def do(self, grid, x, y):
+        # super().do(grid, x, y)
         # self.move(grid, x, y)
 
     def move(self, grid, x, y):
@@ -429,15 +416,22 @@ class Liquid(Updatable):
             i, j = random.choice(gaps)
             if grid.can_swap_after_random(x, y, i, j):
                 grid.swap(x, y, i, j)
+                return
+
         gap_distances = grid.check_side_gap_distance(x, y)
-        x2 = 0
+        x2 = -1
         if gap_distances[0] > 0 and gap_distances[1] > 0 and gap_distances[0] == gap_distances[1]:
             x2 = x + random.randint(-1, 1)
-        elif gap_distances[0] > 0 and (gap_distances[0] < gap_distances[1] or gap_distances[1] == 0):
+        elif (gap_distances[0] > 0 and gap_distances[1] == 0):
             x2 = x + random.randint(-1, 0)
-        elif gap_distances[1] > 0 and (gap_distances[1] < gap_distances[0] or gap_distances[0] == 0):
+        elif (gap_distances[0] > 0 and gap_distances[0] < gap_distances[1]):
+            x2 = x + random.randint(-1, 0)
+        elif gap_distances[1] > 0 and gap_distances[0] == 0:
             x2 = x + random.randint(0, 1)
-        if not x2 == 0 and grid.can_swap(x, y, x2, y) and grid.can_swap_after_random(x, y, x2, y):
+        elif gap_distances[1] > 0 and (gap_distances[1] < gap_distances[0]):
+            x2 = x + random.randint(0, 1)
+
+        if not x2 == -1 and grid.can_swap(x, y, x2, y) and grid.can_swap_after_random(x, y, x2, y):
             grid.swap(x, y, x2, y)
 
 class Gas(Updatable):
@@ -446,8 +440,8 @@ class Gas(Updatable):
         self.density = density
         self.default_direction = default_direction
 
-    def do(self, grid, x, y):
-        super().do(grid, x, y)
+    # def do(self, grid, x, y):
+        # super().do(grid, x, y)
         # self.move(grid, x, y)
 
     def move(self, grid, x, y):
@@ -456,15 +450,21 @@ class Gas(Updatable):
             i, j = random.choice(gaps)
             if grid.can_swap_after_random(x, y, i, j):
                 grid.swap(x, y, i, j)
+
         gap_distances = grid.check_side_gap_distance(x, y)
-        x2 = 0
+        x2 = -1
         if gap_distances[0] > 0 and gap_distances[1] > 0 and gap_distances[0] == gap_distances[1]:
             x2 = x + random.randint(-1, 1)
-        elif gap_distances[0] > 0 and (gap_distances[0] < gap_distances[1] or gap_distances[1] == 0):
+        elif (gap_distances[0] > 0 and gap_distances[1] == 0):
             x2 = x + random.randint(-1, 0)
-        elif gap_distances[1] > 0 and (gap_distances[1] < gap_distances[0] or gap_distances[0] == 0):
+        elif (gap_distances[0] > 0 and gap_distances[0] < gap_distances[1]):
+            x2 = x + random.randint(-1, 0)
+        elif gap_distances[1] > 0 and gap_distances[0] == 0:
             x2 = x + random.randint(0, 1)
-        if not x2 == 0 and grid.can_swap(x, y, x2, y) and grid.can_swap_after_random(x, y, x2, y):
+        elif gap_distances[1] > 0 and (gap_distances[1] < gap_distances[0]):
+            x2 = x + random.randint(0, 1)
+
+        if not x2 == -1 and grid.can_swap(x, y, x2, y) and grid.can_swap_after_random(x, y, x2, y):
             grid.swap(x, y, x2, y)
 
 # special materials
@@ -611,11 +611,11 @@ class Clone(Particle):
             
 
 # Materials
-air = Gas("Air", (0, 0, 0), (colourMode["STATIC"],), [None, None], [None, None], 0.026, 1.23, False)
-sand = Solid("Sand", ([200, 250], [125, 200], [75, 100]), (colourMode['STATIC'], colourMode['TEMPERATURE']), [None, None], [None, None], 0.4, 1602, True)
-water = Liquid("Water", (0, 0, 255), (colourMode["TEMPERATURE"],), [0, 100], [None, None], 0.6, 997, True)
+air = Gas("Air", (0, 0, 0), (colourMode["BLACKBODY"],), [None, None], [None, None], 0.026, 1.23, False)
+sand = Solid("Sand", ([200, 250], [125, 200], [75, 100]), (colourMode['STATIC'], colourMode['BLACKBODY']), [None, None], [None, None], 0.4, 1602, True)
+water = Liquid("Water", (0, 0, 255), (colourMode["TEMPERATURE_DOWN"],), [0, 100], [None, None], 0.6, 997, True)
 ice = Updatable("Ice", ([55, 85], [55, 85], 255), (colourMode["STATIC"],), [None, 0], [None, water], 2.22)
-steam = Gas("Steam", (150, 150, 150), (colourMode["TEMPERATURE"],), [100, None], [water, None], 0.0184, 0.6, False)
+steam = Gas("Steam", (200, 200, 200), (colourMode["TEMPERATURE_DOWN"],), [100, None], [water, None], 0.0184, 0.6, False)
 water.next_phase = [ice, steam]
 ice.next_phase = [None, water]
 steam.next_phase = [water, None]
@@ -624,7 +624,7 @@ fire = Gas("Fire", ([200, 254], [0, 50], [0, 50]), (colourMode["NOISE"],), [300,
 smoke.next_phase=[None, fire]
 oil = Liquid("Oil", (50, 25, 25), (colourMode["STATIC"],), [None, 300], [None, None], 0.6, 800, True)
 lava = Liquid("Lava", (254, [150, 250], [150, 250]), (colourMode['NOISE'],), [1160, None], [None, None], 2, 2400, True)
-stone = Solid("Stone", (200, 200, [190, 210]), (colourMode['STATIC'], colourMode['TEMPERATURE']), [None, 1160], [None, lava], 2.5, 2500, True)
+stone = Solid("Stone", (200, 200, [190, 210]), (colourMode['STATIC'], colourMode['BLACKBODY']), [None, 1160], [None, lava], 2.5, 2500, True)
 lava.next_phase = [stone, None]
 destruct = Destruct("Destruct", (0, 250, 10), (colourMode["NOISE"],),)
 grow = Grow("Grow", (0, [150, 250], 10), (colourMode["STATIC"],), [None, 300], [None, None], 0.6)
@@ -702,14 +702,15 @@ grid.print()
 # grid.set(1, 0, Cell(ice, temperature=-14))
 # grid.draw(6, 9, Cell(water, temperature=23))
 
+count = 0
 
 while not done:
     # print("--------------------------")
     
     # debug(grid)
 
-    # grid.draw(5, 1, Cell(fire, burning, False, 1000, 100, 0, 0))
-    grid.draw(1, 25, Cell(lava, temperature=300))
+    # grid.draw(15, 15, Cell(fire, burning, False, 1000, 50, 0, 0))
+    # grid.draw(37, 20, Cell(stone, temperature=1900))
                 # pass
     # grid.draw(14, 14, Cell(destruct)) 
 
@@ -722,9 +723,16 @@ while not done:
 
     
     # grid.draw(10, 25, Cell(water, temperature=102))
+    grid.draw(5, 22, Cell(water, temperature=23.5))
+    grid.draw(6, 22, Cell(water, temperature=23.5))
+    grid.draw(7, 22, Cell(water, temperature=23.5))
 
-    grid.draw(39, 25, Cell(water, temperature=10))
 
+    # cell = grid.get(5, 5)
+    # cell.temperature += 15
+
+    # cell = grid.get(35, 35)
+    # cell.temperature -= 15
 
 
     # grid.draw(5, 20, Cell(oil, temperature=-24, flammable=True, fuel=200))
@@ -737,7 +745,7 @@ while not done:
     # grid.draw(7, 5, Cell(ice, temperature=100))
     # grid.draw(1, 14, Cell(sand, temperature=40))
     
-    # grid.draw(13, 12, Cell(lava, temperature=900))
+    grid.draw(35, 7, Cell(lava, temperature=1900))
     # grid.print()
     # grid.draw(2, 14, Cell(water, temperature=23))
     # grid.set(1, 3, Cell(ice, direction=None, temperature=-1))
