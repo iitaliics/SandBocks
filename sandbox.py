@@ -8,11 +8,10 @@ import math
     Teleport
     Flip
     Barriers
-    TempConduct clone
 """
 
 # 1 to 1 size with LED grid
-pixelWidth = 20
+pixelWidth = 5
 # pixel size
 # resolution = [32, 16]
 # pixel count
@@ -141,9 +140,6 @@ class Grid:
         if right == 0 and current_layer_right_gap:
             right = grid.width
 
-        if x == 38 and y == 1:
-            print(1, left, right)
-
         return [left, right]
 
     def can_swap_after_random(self, x1, y1, x2, y2):
@@ -221,6 +217,7 @@ class Grid:
             # print(self.get(entry[0], entry[1]).__dict__, (entry[0], entry[1]))
             update_pixel = self.grid[entry[0]][entry[1]]
             update_pixel.temperature += entry[2]
+            
             if not update_pixel.state == None:
                 if hasattr(update_pixel.state, 'do'):
                     update_pixel.state.do(self, entry[0], entry[1])
@@ -294,8 +291,6 @@ class Cell:
             self.colour = self.get_base_colour()
         if colourMode['TEMPERATURE_DOWN'] in self.colour_mode:
             self.colour = self.temperature_down_colour_mode()
-        if colourMode['TEMPERATURE_UP'] in self.colour_mode:
-            self.colour = self.temperature_up_colour_mode()
         if colourMode['BLACKBODY'] in self.colour_mode:
             self.colour = self.blackbody_colour_mode()
         if self.state is not None:
@@ -309,7 +304,7 @@ class Cell:
         elif self.element.next_phase[0] is not None:
             ratio = 1.5 - (self.element.phase_change_temp[0] / self.temperature)
         else:
-            ratio = 1
+            ratio = max(0.5, self.temperature / 200)
 
         r = self.colour_base[0]
         g = self.colour_base[1]
@@ -379,8 +374,7 @@ class Updatable(Particle):
             cell.update_colour_from_state_change()
             
             return
-        if cell.element.next_phase[1] is None\
-                and cell.flammable == True and current_temp > cell.element.phase_change_temp[1]:
+        if cell.element.next_phase[1] is None and cell.flammable == True and current_temp > cell.element.phase_change_temp[1]:
             cell.state = burning
 
 class Solid(Updatable):
@@ -389,8 +383,8 @@ class Solid(Updatable):
         self.density = density
         self.default_direction = default_direction
 
-    # def do(self, grid, x, y):
-        # super().do(grid, x, y)
+    def do(self, grid, x, y):
+        super().do(grid, x, y)
         # self.move(grid, x, y)
 
     def move(self, grid, x, y):
@@ -406,8 +400,8 @@ class Liquid(Updatable):
         self.density = density
         self.default_direction = default_direction
 
-    # def do(self, grid, x, y):
-        # super().do(grid, x, y)
+    def do(self, grid, x, y):
+        super().do(grid, x, y)
         # self.move(grid, x, y)
 
     def move(self, grid, x, y):
@@ -440,8 +434,8 @@ class Gas(Updatable):
         self.density = density
         self.default_direction = default_direction
 
-    # def do(self, grid, x, y):
-        # super().do(grid, x, y)
+    def do(self, grid, x, y):
+        super().do(grid, x, y)
         # self.move(grid, x, y)
 
     def move(self, grid, x, y):
@@ -487,6 +481,7 @@ class Grow(Updatable):
         self.default_direction = None
 
     def do(self, grid, x, y):
+        super().do(grid, x, y)
         cell = grid.get(x, y)
         if cell.life > 0:
             contact = grid.check_surroundings(x, y)
@@ -510,10 +505,10 @@ class Bug(Updatable):
         self.default_direction = None
 
     def do(self, grid, x, y):
+        super().do(grid, x, y)
         cell = grid.get(x, y)
-        print(cell.life)
         contact = grid.check_surroundings(x, y)
-        relevantContact = [element for element in contact if (isinstance(element[2].element, Solid) or (isinstance(element[2].element, Updatable) and element[2].direction is None))]
+        relevantContact = [element for element in contact if (isinstance(element[2].element, Solid) or (isinstance(element[2].element, Updatable) and element[2].direction is None and not element[2].element.name == bug.name))]
         if cell.life > 0 and len(relevantContact):
             cell.life -= 1
             return
@@ -540,7 +535,7 @@ class Burning(Static):
         relevantFreeContact = [element for element in contact if element[2].element == air]
         for neighbour in relevantFlammableContact:
             focus_pixel = grid.grid[neighbour[0]][neighbour[1]]
-            if focus_pixel.temperature > self.threshold and random.random() > 0.9:
+            if focus_pixel.temperature > self.threshold and random.random() < 1 - (focus_pixel.temperature / self.threshold):
                 focus_pixel.state = burning
         
         # smoke responsibility
@@ -622,7 +617,8 @@ class Clone(Particle):
             if not len(relevantContact):
                         return
             choice = random.choice(relevantContact) 
-            pixel.clone_element = (choice if choice[2].element is not clone else None)
+            element = (choice[2] if choice[2].element is not clone else None)
+            pixel.clone_element = Cell(element.element, element.state, element.flammable, element.temperature, element.fuel, element.life, element.branches)
         
         else:
             contact = grid.check_surroundings(x, y)
@@ -630,34 +626,82 @@ class Clone(Particle):
             if not len(relevantContact):
                         return
             chosenOne = random.choice(relevantContact)
-            grid.draw(chosenOne[0], chosenOne[1], Cell(pixel.clone_element[2].element, pixel.clone_element[2].state, pixel.clone_element[2].flammable, pixel.clone_element[2].temperature, pixel.clone_element[2].fuel, pixel.clone_element[2].life, pixel.clone_element[2].branches))
-            
+            grid.draw(chosenOne[0], chosenOne[1], Cell(pixel.clone_element.element, pixel.clone_element.state, pixel.clone_element.flammable, pixel.clone_element.temperature, pixel.clone_element.fuel, pixel.clone_element.life, pixel.clone_element.branches))
+
+class Temperature(Updatable):
+    def __init__(self, name, colour, colour_mode, phase_change_temp, next_phase, thermal_conductivity, temperature):
+        super().__init__(name, colour, colour_mode, phase_change_temp, next_phase, thermal_conductivity)
+        self.clone_element = None
+        self.default_direction = None
+        self.temperature = temperature
+
+    def do(self, grid, x, y):
+        pixel = grid.get(x, y)
+        pixel.temperature = self.temperature
+
+class Flip(Particle):
+    def __init__(self, name, colour, colour_mode):
+        super().__init__(name, colour, colour_mode)
+        self.default_direction = None
+    
+    def do(self, grid, x, y):
+        contact = grid.check_surroundings(x, y)
+        relevantContact = [element for element in contact if element[2].element == air and element[2].direction is not None]
+        if not len(relevantContact):
+            return
+        chosenOne = random.choice(relevantContact)
+        chosenOne[2].direction = not chosenOne[2].direction
+
+
 
 # Materials
 air = Gas("Air", (0, 0, 0), (colourMode["BLACKBODY"],), [None, None], [None, None], 0.026, 1.23, False)
+
 sand = Solid("Sand", ([200, 250], [125, 200], [75, 100]), (colourMode['STATIC'], colourMode['BLACKBODY']), [None, None], [None, None], 0.4, 1602, True)
+
 water = Liquid("Water", (0, 0, 255), (colourMode["TEMPERATURE_DOWN"],), [0, 100], [None, None], 0.6, 997, True)
 ice = Updatable("Ice", ([55, 85], [55, 85], 255), (colourMode["STATIC"],), [None, 0], [None, water], 2.22)
 steam = Gas("Steam", (200, 200, 200), (colourMode["TEMPERATURE_DOWN"],), [100, None], [water, None], 0.0184, 0.6, False)
+snow = Solid("Snow", ([240, 254], [240, 254], [240, 254]), (colourMode["STATIC"], ), [None, 0], [None, water], 0.1, 70, True)
 water.next_phase = [ice, steam]
 ice.next_phase = [None, water]
 steam.next_phase = [water, None]
+
 smoke = Gas("Smoke", (254, 254, 254), (colourMode["STATIC"],), [None, 300], [None, None], 0.6, 0.6, False)
 fire = Gas("Fire", ([200, 254], [0, 50], [0, 50]), (colourMode["NOISE"],), [300, None], [smoke, None], 0.6, 0.6, False)
 smoke.next_phase=[None, fire]
-oil = Liquid("Oil", (50, 25, 25), (colourMode["STATIC"],), [None, 300], [None, None], 0.6, 800, True)
+
+oil = Liquid("Oil", (50, 25, 25), (colourMode["SOLID"],), [None, 300], [None, None], 0.6, 800, True)
+
 lava = Liquid("Lava", (254, [150, 250], [150, 250]), (colourMode['NOISE'],), [1160, None], [None, None], 2, 2400, True)
 stone = Solid("Stone", (200, 200, [190, 210]), (colourMode['STATIC'], colourMode['BLACKBODY']), [None, 1160], [None, lava], 2.5, 2500, True)
 lava.next_phase = [stone, None]
-destruct = Destruct("Destruct", (0, 250, 10), (colourMode["NOISE"],),)
-grow = Grow("Grow", (0, [150, 250], 10), (colourMode["STATIC"],), [None, 300], [None, None], 0.6)
-burning = Burning("Burning", threshold=149)
-decay = Decay("Decay")
-clone = Clone("Clone", (150, 150, 0), (colourMode['SOLID'], ))
+stone.next_phase = [None, lava]
 
-bug = Bug("Bug", (150, 200, 0), (colourMode['SOLID'], ), [None, 300], [None, None], 0.6)
+wood = Updatable("Wood", ([50, 100], [25, 55], 0), (colourMode['STATIC'],), [None, 250], [None, None], 0.15)
+
+molten_metal = Liquid("Molten Metal", (75, 75, 85), (colourMode['BLACKBODY'],), [1538, None], [None, None], 6, 7800, True)
+metal = Updatable("Metal", (75, 75, 85), (colourMode['BLACKBODY'],), [None, 1538], [None, molten_metal], 3)
+molten_metal.next_phase = [metal, None]
+metal.next_phase = [None, molten_metal]
 
 block = Particle("Block", (100, 100, 100), (colourMode['STATIC'],))
+
+# Special
+destruct = Destruct("Destruct", (0, 250, 10), (colourMode["NOISE"],),)
+grow = Grow("Grow", (0, [150, 250], 10), (colourMode["STATIC"],), [None, 300], [None, None], 0.6)
+clone = Clone("Clone", (150, 150, 0), (colourMode['SOLID'], ))
+cold = Temperature("Cold", ([50, 75], [50, 75], [100, 254]), (colourMode['NOISE'],), [None, None], [None, None], 0.05, -10000)
+hot = Temperature("Hot", ([100, 254], [50, 75], [50, 75]), (colourMode['NOISE'],), [None, None], [None, None], 0.05, 10000)
+conduct = Updatable("Conduct", (100, 200, 100), (colourMode["BLACKBODY"], colourMode["TEMPERATURE_DOWN"],), [None, None], [None, None], 5)
+flip = Flip("Flip", (25, 240, 0), (colourMode['SOLID'], ))
+
+# States
+burning = Burning("Burning", threshold=149)
+decay = Decay("Decay")
+
+bug = Bug("Bug", (150, 200, 0), (colourMode['SOLID'], ), [None, 50], [None, None], 0.6)
+
 
 def debug(grid):
     tally = 0
@@ -728,10 +772,23 @@ grid.print()
 # grid.set(1, 0, Cell(ice, temperature=-14))
 # grid.draw(6, 9, Cell(water, temperature=23))
 
-grid.draw(10, 22, Cell(bug))
-for _ in range(40):
-    grid.draw(_, 21, Cell(ice, None, False, -2003))
+grid.draw(17, 25, Cell(grow,  life = 100, branches = 1, flammable=True, fuel=100))
+grid.draw(17, 24, Cell(clone))
 
+grid.draw(35, 30, Cell(water, temperature=99))
+
+grid.draw(12, 8, Cell(flip))
+
+grid.draw(34, 30, Cell(clone))
+
+for _ in range(40):
+    # grid.draw(_, 21, Cell(ice, None, False, -2003))
+    
+    grid.draw(_, 4, Cell(conduct))
+
+
+grid.draw(5, 35, Cell(cold))
+grid.draw(35, 5, Cell(hot))
 
 count = 0
 
@@ -745,7 +802,6 @@ while not done:
                 # pass
     # grid.draw(14, 14, Cell(destruct)) 
 
-    # grid.draw(17, 16, Cell(grow,  life = 100, branches = 1, flammable=True, fuel=100))
     # grid.draw(17, 15, Cell(clone))
     # grid.draw(18, 15, Cell(clone))
     # grid.draw(19, 15, Cell(clone))
