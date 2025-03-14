@@ -6,12 +6,11 @@ import math
 """ TODO:
     Rest of the elements
     Teleport
-    Flip
     Barriers
 """
 
 # 1 to 1 size with LED grid
-pixelWidth = 5
+pixelWidth = 15
 # pixel size
 # resolution = [32, 16]
 # pixel count
@@ -66,7 +65,13 @@ class Grid:
         element1 = self.get(x1, y1)
         element2 = self.get(x2, y2)
         if isinstance(element2.element, Updatable) and hasattr(element2.element, "density") and element2.direction is not None:
-            if not element1.direction == element2.direction:
+            if not element1.direction == element1.element.default_direction:
+                if element1.direction == True and element1.element.density < element2.element.density:
+                    return True
+                elif element1.direction == False and element1.element.density > element2.element.density:
+                    return True
+
+            elif not element1.direction == element2.direction:
                 if element1.direction == False:
                     return False
                 return True
@@ -340,6 +345,7 @@ class Particle:
         self.name = name
         self.colour = colour
         self.colour_mode = colour_mode
+        self.default_direction = None
 
 class Static:
     def __init__(self, name):
@@ -646,13 +652,11 @@ class Flip(Particle):
     
     def do(self, grid, x, y):
         contact = grid.check_surroundings(x, y)
-        relevantContact = [element for element in contact if element[2].element == air and element[2].direction is not None]
+        relevantContact = [element for element in contact if not element[2].element == air and element[2].direction is not None]
         if not len(relevantContact):
             return
         chosenOne = random.choice(relevantContact)
         chosenOne[2].direction = not chosenOne[2].direction
-
-
 
 # Materials
 air = Gas("Air", (0, 0, 0), (colourMode["BLACKBODY"],), [None, None], [None, None], 0.026, 1.23, False)
@@ -685,10 +689,10 @@ metal = Updatable("Metal", (75, 75, 85), (colourMode['BLACKBODY'],), [None, 1538
 molten_metal.next_phase = [metal, None]
 metal.next_phase = [None, molten_metal]
 
-block = Particle("Block", (100, 100, 100), (colourMode['STATIC'],))
+block = Particle("Block", (100, 100, 100), (colourMode["SOLID"], ))
 
 # Special
-destruct = Destruct("Destruct", (0, 250, 10), (colourMode["NOISE"],),)
+destruct = Destruct("Destruct", ([25, 55], [25, 55], [25, 55]), (colourMode["NOISE"],),)
 grow = Grow("Grow", (0, [150, 250], 10), (colourMode["STATIC"],), [None, 300], [None, None], 0.6)
 clone = Clone("Clone", (150, 150, 0), (colourMode['SOLID'], ))
 cold = Temperature("Cold", ([50, 75], [50, 75], [100, 254]), (colourMode['NOISE'],), [None, None], [None, None], 0.05, -10000)
@@ -781,6 +785,10 @@ grid.draw(12, 8, Cell(flip))
 
 grid.draw(34, 30, Cell(clone))
 
+grid.draw(39, 39, Cell(destruct))
+
+
+
 for _ in range(40):
     # grid.draw(_, 21, Cell(ice, None, False, -2003))
     
@@ -788,7 +796,7 @@ for _ in range(40):
 
 
 grid.draw(5, 35, Cell(cold))
-grid.draw(35, 5, Cell(hot))
+grid.draw(2, 7, Cell(hot))
 
 count = 0
 
