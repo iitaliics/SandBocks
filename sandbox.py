@@ -347,7 +347,8 @@ class Particle:
         self.colour_mode = colour_mode
         self.default_direction = None
 
-class Static:
+# used for state
+class State:
     def __init__(self, name):
         self.name = name
  
@@ -394,8 +395,8 @@ class Solid(Updatable):
         self.density = density
         self.default_direction = default_direction
 
-    def do(self, grid, x, y):
-        super().do(grid, x, y)
+    # def do(self, grid, x, y):
+    #     super().do(grid, x, y)
         # self.move(grid, x, y)
 
     def move(self, grid, x, y):
@@ -411,8 +412,8 @@ class Liquid(Updatable):
         self.density = density
         self.default_direction = default_direction
 
-    def do(self, grid, x, y):
-        super().do(grid, x, y)
+    # def do(self, grid, x, y):
+    #     super().do(grid, x, y)
         # self.move(grid, x, y)
 
     def move(self, grid, x, y):
@@ -445,8 +446,8 @@ class Gas(Updatable):
         self.density = density
         self.default_direction = default_direction
 
-    def do(self, grid, x, y):
-        super().do(grid, x, y)
+    # def do(self, grid, x, y):
+    #     super().do(grid, x, y)
         # self.move(grid, x, y)
 
     def move(self, grid, x, y):
@@ -533,7 +534,7 @@ class Bug(Updatable):
                     grid.swap(x, y, chosenOne[0], chosenOne[1])
             
 
-class Burning(Static):
+class Burning(State):
     def __init__(self, name, threshold):
         super().__init__(name)
         self.threshold = threshold
@@ -593,7 +594,7 @@ class Burning(Static):
             return (r, g, b)
         return cell.colour
 
-class Decay(Static):
+class Decay(State):
     def __init__(self, name):
         super().__init__(name)
 
