@@ -380,8 +380,13 @@ class Updatable(Particle):
             cell.update_colour_from_state_change()
             
             return
+        if cell.flammable == True:
+            print(cell.element.name)
         if cell.element.next_phase[1] is None and cell.flammable == True and current_temp > cell.element.phase_change_temp[1]:
             cell.state = burning
+
+        if cell.temperature > 65534 or cell.temperature < -65534:
+            cell.temperature = max(-65534, min(65534, cell.temperature))
 
 class Solid(Updatable):
     def __init__(self, name, colour, colour_mode, phase_change_temp, next_phase, thermal_conductivity, density, default_direction):
@@ -553,6 +558,7 @@ class Burning(Static):
                 chosenOne[2].state = decay
                 chosenOne[2].element = smoke
                 chosenOne[2].direction = False
+                chosenOne[2].flammable = False
                 chosenOne[2].colour_base = smoke.colour
                 # chosenOne[2].update_colour_from_state_change()
                 chosenOne[2].fuel = max(cell.fuel / 2, 1)
@@ -563,6 +569,7 @@ class Burning(Static):
             cell.state = decay
             cell.element = smoke
             cell.direction = False
+            cell.flammable = False
             cell.colour_base = smoke.colour
             cell.update_colour_from_state_change()
             
@@ -684,8 +691,8 @@ stone.next_phase = [None, lava]
 
 wood = Updatable("Wood", ([50, 100], [25, 55], 0), (colourMode['STATIC'],), [None, 250], [None, None], 0.15)
 
-molten_metal = Liquid("Molten Metal", (75, 75, 85), (colourMode['BLACKBODY'],), [1538, None], [None, None], 6, 7800, True)
-metal = Updatable("Metal", (75, 75, 85), (colourMode['BLACKBODY'],), [None, 1538], [None, molten_metal], 3)
+molten_metal = Liquid("Molten Metal", (125, 75, 85), (colourMode['BLACKBODY'],), [1538, None], [None, None], 2.5, 7800, True)
+metal = Updatable("Metal", (75, 75, 85), (colourMode['BLACKBODY'],), [None, 1538], [None, molten_metal], 2.5)
 molten_metal.next_phase = [metal, None]
 metal.next_phase = [None, molten_metal]
 
@@ -779,7 +786,7 @@ grid.print()
 grid.draw(17, 25, Cell(grow,  life = 100, branches = 1, flammable=True, fuel=100))
 grid.draw(17, 24, Cell(clone))
 
-grid.draw(35, 30, Cell(water, temperature=99))
+grid.draw(35, 30, Cell(molten_metal, temperature=5000))
 
 grid.draw(12, 8, Cell(flip))
 
@@ -792,7 +799,7 @@ grid.draw(39, 39, Cell(destruct))
 for _ in range(40):
     # grid.draw(_, 21, Cell(ice, None, False, -2003))
     
-    grid.draw(_, 4, Cell(conduct))
+    grid.draw(_, 4, Cell(block))
 
 
 grid.draw(5, 35, Cell(cold))
