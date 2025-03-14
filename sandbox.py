@@ -673,7 +673,7 @@ sand = Solid("Sand", ([200, 250], [125, 200], [75, 100]), (colourMode['STATIC'],
 water = Liquid("Water", (0, 0, 255), (colourMode["TEMPERATURE_DOWN"],), [0, 100], [None, None], 0.6, 997, True)
 ice = Updatable("Ice", ([55, 85], [55, 85], 255), (colourMode["STATIC"],), [None, 0], [None, water], 2.22)
 steam = Gas("Steam", (200, 200, 200), (colourMode["TEMPERATURE_DOWN"],), [100, None], [water, None], 0.0184, 0.6, False)
-snow = Solid("Snow", ([240, 254], [240, 254], [240, 254]), (colourMode["STATIC"], ), [None, 0], [None, water], 0.1, 70, True)
+snow = Solid("Snow", ([240, 254], [240, 254], [240, 254]), (colourMode["STATIC"], ), [None, 0], [None, water], 0.05, 70, True)
 water.next_phase = [ice, steam]
 ice.next_phase = [None, water]
 steam.next_phase = [water, None]
@@ -786,7 +786,7 @@ grid.print()
 grid.draw(17, 25, Cell(grow,  life = 100, branches = 1, flammable=True, fuel=100))
 grid.draw(17, 24, Cell(clone))
 
-grid.draw(35, 30, Cell(molten_metal, temperature=5000))
+grid.draw(35, 30, Cell(snow, temperature=-20))
 
 grid.draw(12, 8, Cell(flip))
 
