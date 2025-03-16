@@ -1,121 +1,103 @@
+#include <array>
+
 int width = 32;
 int height = 16;
-Cell grid[width][height];
+//Cell grid[width][height];
 
 class Grid {
-  public:
-    int width;
-    int height;
-    _ = ["Cell(air, temperature=23)" for _ in range(height)]
-    self.grid = [_ for _ in range(width)]
+public:
+  int width;
+  int height;
+  //    _ = ["Cell(air, temperature=23)" for _ in range(height)]
+  //    self.grid = [_ for _ in range(width)]
 };
 
-class Cell {
-  public:
-    
+enum DIRECTION {
+  NONE = -1,
+  False,
+  True
+};
 
-    // python code
-    // def __init__(self, element, state=None, flammable=False, temperature=23.0, fuel=0, life=0, branches=0):
-    //     self.element = element
-    //     self.colour_params = element.colour
-    //     self.colour_base = self.get_base_colour()
-    //     self.colour_mode = element.colour_mode
-    //     self.colour = self.colour_base
-    //     self.direction = element.default_direction
-    //     # True for down, false for up
-    //     self.state = state
-    //     self.flammable = flammable
-    //     self.temperature = temperature
-    //     self.fuel = fuel
-    //     self.life = life
-    //     self.branches = branches
-    //     self.clone_element=None
+enum COLOURMODE {
+  SOLID,
+  STATIC,
+  NOISE,
+  TEMPERATURE_DOWN,
+  BLACKBODY
+};
 
-    // def update_colour_from_state_change(self):
-    //     self.colour_params = self.element.colour
-    //     self.colour_mode = self.element.colour_mode
-    //     self.colour_base = self.get_base_colour()
-    //     self.colour = self.colour_base
-    //     # self.colour = self.get_base_colour()
+class Colour {
+public:
+  byte param_red[2];
+  byte param_green[2];
+  byte param_blue[2];
 
-    // # def update_colour(self):
-    // #     # if colourMode['STATIC'] in self.colour_mode:
-    // #     #     return
-    // #     if colourMode['NOISE'] in self.colour_mode and random.random() > 0.95:
-    // #         self.colour = self.get_base_colour()
+  byte base_red;
+  byte base_green;
+  byte base_blue;
 
-    // def get_base_colour(self):
-    //     if isinstance(self.colour_params[0], list):
-    //         r = random.randint(self.colour_params[0][0], self.colour_params[0][1])
-    //     else:
-    //         r = self.colour_params[0]
-    //     if isinstance(self.colour_params[1], list):
-    //         g = random.randint(self.colour_params[1][0], self.colour_params[1][1])
-    //     else:
-    //         g = self.colour_params[1]
-    //     if isinstance(self.colour_params[2], list):
-    //         b = random.randint(self.colour_params[2][0], self.colour_params[2][1])
-    //     else:
-    //         b = self.colour_params[2]
-    //     return (r, g, b)
-    
-    // def update_colour(self):
-        
-    //     if colourMode['NOISE'] in self.colour_mode and random.random() > 0.95:
-    //         self.colour = self.get_base_colour()
-    //     if colourMode['TEMPERATURE_DOWN'] in self.colour_mode:
-    //         self.colour = self.temperature_down_colour_mode()
-    //     if colourMode['BLACKBODY'] in self.colour_mode:
-    //         self.colour = self.blackbody_colour_mode()
-    //     if self.state is not None:
-    //         if hasattr(self.state, "colour"):
-    //             self.colour = self.state.colour(cell = self)
+  byte display_red;
+  byte display_green;
+  byte display_blue;
+
+  COLOURMODE colour_mode;
+
+  void set_base_colour(int param_r[2], int param_g[2], int param_b[2]) {
+    if (param_r[1] == 0) {
+      base_red = param_r[0];
+    } else {
+      base_red = random(param_r[0], param_r[1]);
+    }
+    if (param_g[1] == 0) {
+      base_green = param_g[0];
+    } else {
+      base_green = random(param_g[0], param_g[1]);
+    }
+    if (param_b[1] == 0) {
+      base_blue = param_b[0];
+    } else {
+      base_blue = random(param_b[0], param_b[1]);
+    }
+  };
+};
 
 
-    // def temperature_down_colour_mode(self):
-    //     if self.element.next_phase[0] is not None and self.element.next_phase[1] is not None:
-    //         ratio =  (self.temperature - self.element.phase_change_temp[0]) / (0.5 * self.element.phase_change_temp[1] - self.element.phase_change_temp[0])
-    //     elif self.element.next_phase[0] is not None:
-    //         ratio = 1.5 - (self.element.phase_change_temp[0] / self.temperature)
-    //     else:
-    //         ratio = max(0.5, self.temperature / 200)
-
-    //     r = self.colour_base[0]
-    //     g = self.colour_base[1]
-    //     b = self.colour_base[2]
 
 
-    //     r = int(min(max((r * ratio), 0), 254))
-    //     g = int(min(max((g * ratio), 0), 254))
-    //     b = int(min(max((b * ratio), 0), 254))
+class Particle {
+public:
+  String name;
+  Colour colour;
+  COLOURMODE colour_mode;
+  DIRECTION direction;
 
-    //     return (r, g, b)
+  Particle(String name, Colour colour, COLOURMODE colour_mode = COLOURMODE::SOLID, DIRECTION direction = DIRECTION::NONE)
+    : name(name), colour(colour), colour_mode(colour_mode), direction(direction) {} //AI told me to do this :(
+};
+
+class Updatable : public Particle {
+public:
+  int phase_change_temp[2];
+  Particle next_phase[2];
+  float thermal_conductivity;
+  // does name, colour and colour_mode need to be here if it's used 3 lines below?
+
+  Updatable(String name, Colour colour, COLOURMODE colour_mode, int phase_change_temp[2], Particle next_phase[2], float thermal_conductivity) {
+    : Particle(name, colour, colour_mode)  {
+      this->phase_change_temp[0] = phase_change_temp[0];
+      this->phase_change_temp[1] = phase_change_temp[1];
+      this->next_phase[0] = next_phase[0];
+      this->next_phase[1] = next_phase[1];
+    }
+  }
+};
 
 
-    // def blackbody_colour_mode(self):
-    //     blackbody_constant = 30
-    //     r = self.colour_base[0]
-    //     g = self.colour_base[1]
-    //     b = self.colour_base[2]
-
-    //     # colours = self.get_base_colour()
-    //     # r = colours[0]
-    //     # g = colours[1]
-    //     # b = colours[2]
-
-    //     r = int(min(max(r + (2 *(self.temperature) / (blackbody_constant)), 0), 254))
-    //     g = int(min(max(g + (0.5 * (self.temperature) / (blackbody_constant)), 0), 254))
-    //     b = int(min(max(b + ((self.temperature) / (blackbody_constant)), 0), 254))
-
-    //     return (r, g, b)
-}
 
 void setup() {
   // put your setup code here, to run once:
-
 }
 
 void loop() {
   // put your main code here, to run repeatedly:
-
 }

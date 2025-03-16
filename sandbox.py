@@ -346,19 +346,8 @@ class Particle:
         self.colour = colour
         self.colour_mode = colour_mode
         self.default_direction = None
-
-# used for state
-class State:
-    def __init__(self, name):
-        self.name = name
  
-class Updatable(Particle):
-    def __init__(self, name, colour, colour_mode, phase_change_temp, next_phase, thermal_conductivity):
-        super().__init__(name, colour, colour_mode)
-        self.phase_change_temp = phase_change_temp
-        self.next_phase = next_phase
-        self.thermal_conductivity = thermal_conductivity
-        self.default_direction = None
+
 
     def do(self, grid, x, y):
         cell = grid.get(x, y)
@@ -533,8 +522,8 @@ class Bug(Updatable):
                     chosenOne = random.choice(relevantFree)
                     grid.swap(x, y, chosenOne[0], chosenOne[1])
             
-
-class Burning(State):
+# state
+class Burning:
     def __init__(self, name, threshold):
         super().__init__(name)
         self.threshold = threshold
@@ -594,7 +583,8 @@ class Burning(State):
             return (r, g, b)
         return cell.colour
 
-class Decay(State):
+# state
+class Decay:
     def __init__(self, name):
         super().__init__(name)
 
