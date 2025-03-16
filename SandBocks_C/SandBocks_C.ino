@@ -90,9 +90,113 @@ public:
       this->next_phase[1] = next_phase[1];
     }
   }
+
+  do(Grid grid, byte x, byte y) {
+    // Cell cell = grid.get(x, y);
+    // int current_temp = cell.temperature;
+    if (cell.element.next_phase[0] != ELEMENT_ID::NONE && current_temp < cell.element.phase_change_temp[0]) {
+      cell.element = ELEMENT[ELEMENT_ID[cell.element.next_phase[0]]];
+      cell.direction = cell.element.default_direction;
+      cell.update_colour_from_state_change()
+      return
+    } else if (cell.element.next_phase[1] != ELEMENT_ID::NONE && current_temp > cell.element.phase_change_temp[1]) {
+      cell.element = ELEMENT[ELEMENT_ID[cell.element.next_phase[1]]];
+      cell.direction = cell.element.default_direction;
+      cell.update_colour_from_state_change()
+      return
+    }
+
+    if (cell.element.next_phase[1] == ELEMENT_ID::NONE && cell.flammable && current_temp > cell.element.phase_change_temp[1]) {
+      cell.state = STATE::BURNING;
+    }
+            
+  }
 };
 
+enum ELEMENT_ID {
+  AIR,
+  
+  SAND,
+  
+  WATER,
+  ICE,
+  STEAM,
+  SNOW,
+  
+  SMOKE,
+  FIRE,
 
+  OIL,
+
+  LAVA,
+  STONE,
+
+  WOOD,
+
+  MOLTEN_METAL,
+  METAL,
+
+  BLOCK,
+
+  // Special
+  DESTRUCT,
+  GROW,
+  CLONE,
+  COLD,
+  HOT,
+  CONDUCT,
+  FLIP,
+  BUG,
+
+  NONE
+}
+
+enum ELEMENT {
+  // AIR,
+  
+  // SAND,
+  
+  // WATER,
+  // ICE,
+  // STEAM,
+  // SNOW,
+  
+  // SMOKE,
+  // FIRE,
+
+  // OIL,
+
+  // LAVA,
+  // STONE,
+
+  // WOOD,
+
+  // MOLTEN_METAL,
+  // METAL,
+
+  // BLOCK,
+
+  // // Special
+  // DESTRUCT,
+  // GROW,
+  // CLONE,
+  // COLD,
+  // HOT,
+  // CONDUCT,
+  // FLIP,
+  // BUG
+};
+
+enum STATE_ID {
+  NONE,
+  BURNING,
+  DECAY
+}
+
+enum STATE {
+  // BURNING = ,
+  // DECAY = ,
+}
 
 void setup() {
   // put your setup code here, to run once:
