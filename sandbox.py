@@ -347,7 +347,41 @@ class Particle:
         self.colour_mode = colour_mode
         self.default_direction = None
  
+class Updatable(Particle):
+    def __init__(self, name, colour, colour_mode, phase_change_temp, next_phase, thermal_conductivity):
+        super().__init__(name, colour, colour_mode)
+        self.phase_change_temp = phase_change_temp
+        self.next_phase = next_phase
+        self.thermal_conductivity = thermal_conductivity
+        self.default_direction = None
 
+    def do(self, grid, x, y):
+        cell = grid.get(x, y)
+        current_temp = cell.temperature
+        if cell.element.next_phase[0] is not None and current_temp < cell.element.phase_change_temp[0]:
+            # cell.temperature = cell.element.phase_change_temp[0] - 1
+            # print(1, cell.__dict__)
+
+            cell.element = cell.element.next_phase[0]
+            cell.direction = cell.element.default_direction
+            cell.update_colour_from_state_change()
+            # print(2222, cell.__dict__)
+
+            return
+
+        elif cell.element.next_phase[1] is not None and current_temp > cell.element.phase_change_temp[1]:
+            # cell.temperature = cell.element.phase_change_temp[1] + 1
+            cell.element = cell.element.next_phase[1]
+            cell.direction = cell.element.default_direction
+            cell.update_colour_from_state_change()
+            
+            return
+
+        if cell.element.next_phase[1] is None and cell.flammable == True and current_temp > cell.element.phase_change_temp[1]:
+            cell.state = burning
+
+        if cell.temperature > 65534 or cell.temperature < -65534:
+            cell.temperature = max(-65534, min(65534, cell.temperature))
 
     def do(self, grid, x, y):
         cell = grid.get(x, y)
