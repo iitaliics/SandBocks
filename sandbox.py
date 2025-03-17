@@ -383,35 +383,6 @@ class Updatable(Particle):
         if cell.temperature > 65534 or cell.temperature < -65534:
             cell.temperature = max(-65534, min(65534, cell.temperature))
 
-    def do(self, grid, x, y):
-        cell = grid.get(x, y)
-        current_temp = cell.temperature
-        if cell.element.next_phase[0] is not None and current_temp < cell.element.phase_change_temp[0]:
-            # cell.temperature = cell.element.phase_change_temp[0] - 1
-            # print(1, cell.__dict__)
-
-            cell.element = cell.element.next_phase[0]
-            cell.direction = cell.element.default_direction
-            cell.update_colour_from_state_change()
-            # print(2222, cell.__dict__)
-
-            return
-
-        elif cell.element.next_phase[1] is not None and current_temp > cell.element.phase_change_temp[1]:
-            # cell.temperature = cell.element.phase_change_temp[1] + 1
-            cell.element = cell.element.next_phase[1]
-            cell.direction = cell.element.default_direction
-            cell.update_colour_from_state_change()
-            
-            return
-        if cell.flammable == True:
-            print(cell.element.name)
-        if cell.element.next_phase[1] is None and cell.flammable == True and current_temp > cell.element.phase_change_temp[1]:
-            cell.state = burning
-
-        if cell.temperature > 65534 or cell.temperature < -65534:
-            cell.temperature = max(-65534, min(65534, cell.temperature))
-
 class Solid(Updatable):
     def __init__(self, name, colour, colour_mode, phase_change_temp, next_phase, thermal_conductivity, density, default_direction):
         super().__init__(name, colour, colour_mode, phase_change_temp, next_phase, thermal_conductivity)
@@ -558,8 +529,7 @@ class Bug(Updatable):
             
 # state
 class Burning:
-    def __init__(self, name, threshold):
-        super().__init__(name)
+    def __init__(self, threshold):
         self.threshold = threshold
 
     def do(self, grid, x, y):
@@ -619,8 +589,6 @@ class Burning:
 
 # state
 class Decay:
-    def __init__(self, name):
-        super().__init__(name)
 
     def do(self, grid, x, y):
         cell = grid.get(x, y)
@@ -733,8 +701,8 @@ conduct = Updatable("Conduct", (100, 200, 100), (colourMode["BLACKBODY"], colour
 flip = Flip("Flip", (25, 240, 0), (colourMode['SOLID'], ))
 
 # States
-burning = Burning("Burning", threshold=149)
-decay = Decay("Decay")
+burning = Burning(threshold=149)
+decay = Decay()
 
 bug = Bug("Bug", (150, 200, 0), (colourMode['SOLID'], ), [None, 50], [None, None], 0.6)
 
