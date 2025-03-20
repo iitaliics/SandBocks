@@ -1,4 +1,7 @@
 # SandBocks
+
+![SandBocks](https://github.com/user-attachments/assets/98e91b13-ce79-404c-91d0-3197cc6880b9)
+
 I used to love the powder toy, played a lot of it as a child. How cool would it be then if you could have a little box or panel which runs something like that, which you could use a touch-screen to play around with in real-time?
 That is the overall purpose of this project. I want to create a grid of LED lights and use a touch screen to manipulate the game. I have the hardware ready but will discuss that later..
 
