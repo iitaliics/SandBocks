@@ -52,8 +52,10 @@ enum class ELEMENT_ID {
 
   NO_ELEMENT,
 
-  ELEMENT_ID_ENUM_COUNT //Required for setting up the element array
+  ELEMENT_ID_ENUM_COUNT  //Required for setting up the element array
 };
+
+constexpr int ELEMENT_COUNT = static_cast<byte>(ELEMENT_ID::ELEMENT_ID_ENUM_COUNT);
 
 enum class STATE_ID {
   NO_STATE,
@@ -113,7 +115,6 @@ bool getRandomBool(float trueProbability = 0.5f) {
   return dis(gen);
 }
 };
-
 
 // classes
 class Colour {
@@ -215,6 +216,10 @@ public:
     return grid[x][y];
   }
 
+  void set(byte x, byte y, ELEMENT_ID element_id) {
+    grid[x][y] = cell;
+  }
+
   inline bool in_bounds(byte x, byte y) {
     if ((x >= 0 && x < WIDTH) && (y >= 0 && y < HEIGHT)) {
       return true;
@@ -247,14 +252,14 @@ public:
     Cell& cell = get(x, y);
     if (get(x, y).direction != DIRECTION::NONE) {
 
-      byte direction = cell.direction;
+      int8_t direction = static_cast<int8_t>(cell.direction);
 
       if (in_bounds(x, y + direction) && can_swap(x, y, x, y + direction)) {
         gap_list[1] = { x, y + direction };
         return gap_list;  //need this to populate all 3 arrays
       }
 
-      for (byte delta = -1; delta <= 1; delta = delta + 2) {
+      for (int8_t delta = -1; delta <= 1; delta = delta + 2) {
         if (in_bounds(x + delta, y + direction) and can_swap(x, y, x + delta, y + direction)) {
           coordinate_return free_coords = { x + delta, y + direction };
           gap_list[delta + 1] = free_coords;
@@ -262,6 +267,20 @@ public:
       }
     }
     return gap_list;  //middle value will guaranteed be invalid
+  }
+
+  void print() {
+    for (byte i = 0; i < WIDTH; i++) {
+      for (byte j = 0; j < HEIGHT; j++) {
+        Cell& cell = get(i, j);
+        if (cell.element_id == ELEMENT_ID::STONE) {
+          Serial.print(" X ");
+        } else {
+          Serial.print("   ");
+        }
+      }
+    }
+    Serial.println("_______________________________________________");
   }
 };
 
@@ -308,7 +327,7 @@ public:
     Cell& cell = grid.get(x, y);
     int current_temp = cell.temperature;
 
-    Particle* particle = ELEMENT[cell.element_id];
+    Particle* particle = ELEMENT[static_cast<byte>(cell.element_id)];
     if (!isUpdatable(particle)) {  // SOLID inherits from UPDATABLE
       return;
       // safe to use
@@ -390,14 +409,36 @@ Solid* stone = new Solid(
   10.0f,                                    // density
   DIRECTION::True);
 
-Particle* ELEMENT[ELEMENT_ID::ELEMENT_ID_ENUM_COUNT] = {
+Particle* ELEMENT[ELEMENT_COUNT] = {
   stone,
 };
 
+Element createElementInstance(ElementID id) {
+    Particle* element = ELEMENT[id]; // Access element from ELEMENT array
+    
+    // Call the setup method specific to the element type
+    element->setupProperties();
+    
+    // Now create and return the new element (assuming you just need an Element instance)
+    Element newElement;
+    newElement.ELEMENT_ID = id;
+    newElement.temperature = element->temperature;
+    newElement.color = element->color;
+    newElement.phase = element->phaseChanges[0]; // Just using the first phase for simplicity
+    
+    return newElement;
+}
+
+
+Grid grid;
+
 void setup() {
   // put your setup code here, to run once:
+  Serial.begin(9600);
+  grid.set(5, 5, ELEMENT_ID::STONE)
 }
 
 void loop() {
+  grid.print();
   // put your main code here, to run repeatedly:
 }
