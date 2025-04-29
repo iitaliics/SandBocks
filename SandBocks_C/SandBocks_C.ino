@@ -3,7 +3,11 @@
 #include <random>
 #include <cstdint>
 
-
+class Cell;
+class Grid;
+class Particle;
+class Updatable;
+class Solid;
 
 /*
 TODO list:
@@ -16,27 +20,7 @@ TODO list:
 
 */
 
-namespace RandomUtils {
-// Random engine and distribution seed
-static std::random_device rd;
-static std::mt19937 gen(rd());  // Mersenne Twister engine for random numbers
-
-// Generate a random byte  in the range [min, max]
-byte getRandomByte(byte min, byte max) {
-  if (min == max) {
-    return min;  // Prevent range issues
-  }
-  std::uniform_int_distribution<> dis(min, max - 1);
-  return dis(gen);
-}
-
-// Generate a random boolean with a given true probability (0.0 to 1.0)
-bool getRandomBool(float trueProbability = 0.5f) {
-  std::bernoulli_distribution dis(trueProbability);
-  return dis(gen);
-}
-};
-
+// Enum
 enum ELEMENT_ID {
   AIR,
   SAND,
@@ -73,35 +57,6 @@ enum STATE_ID {
   DECAY
 };
 
-constexpr byte width = 32;
-constexpr byte height = 16;
-//Cell grid[width][height];
-
-class Grid {
-public:
-  byte width;
-  byte height;
-  std::array<std::array<Cell, width>, height> grid;
-  //    _ = ["Cell(air, temperature=23)" for _ in range(height)]
-  //    self.grid = [_ for _ in range(width)]
-  Grid(byte width, byte height)
-  : width(width), height(height) {}
-
-  Cell& get(byte x, byte y) {
-    return grid[x][y];
-  }
-
-};
-
-
-
-struct coordinate_return {
-  byte x;
-  byte y;
-};
-
-
-
 enum DIRECTION {
   NONE = -1,
   False,
@@ -116,6 +71,37 @@ enum COLOURMODE {
   BLACKBODY
 };
 
+// Struct
+
+struct coordinate_return {
+  byte x;
+  byte y;
+};
+
+// Random
+namespace RandomUtils {
+// Random engine and distribution seed
+static std::random_device rd;
+static std::mt19937 gen(rd());  // Mersenne Twister engine for random numbers
+
+// Generate a random byte  in the range [min, max]
+byte getRandomByte(byte min, byte max) {
+  if (min == max) {
+    return min;  // Prevent range issues
+  }
+  std::uniform_int_distribution<> dis(min, max - 1);
+  return dis(gen);
+}
+
+// Generate a random boolean with a given true probability (0.0 to 1.0)
+bool getRandomBool(float trueProbability = 0.5f) {
+  std::bernoulli_distribution dis(trueProbability);
+  return dis(gen);
+}
+};
+
+
+// classes
 class Colour {
 public:
   const std::array<byte, 2> param_red;
@@ -140,10 +126,6 @@ public:
   }
 };
 
-Particle* ELEMENT[] = {
-  Gas(ELEMENT_ID::AIR, { { 0, 0 }, { 0, 0 }, { 0, 0 } }, { COLOURMODE::SOLID }, { NULL, NULL }, { ELEMENT_ID::NO_ELEMENT, ELEMENT_ID::NO_ELEMENT })
-};
-
 class Cell {
 public:
   ELEMENT_ID element_id;
@@ -157,10 +139,25 @@ public:
   byte branches;
   ELEMENT_ID clone_element;
 
+  Cell()
+    : element_id(ELEMENT_ID::AIR), // default to AIR
+      colour_data(std::make_unique<Colour>(std::array<byte,2>{0,0}, std::array<byte,2>{0,0}, std::array<byte,2>{0,0}, COLOURMODE::SOLID)),
+      direction(DIRECTION::NONE),
+      state_id(STATE_ID::NO_STATE),
+      flammable(false),
+      temperature(0),
+      fuel(0),
+      life(0),
+      branches(0),
+      clone_element(ELEMENT_ID::NO_ELEMENT)
+  {}
+
   Cell(ELEMENT_ID element_id, std::unique_ptr<Colour> colour_data, bool flammable, int temperature, byte fuel, byte life, byte branches, STATE_ID state_id=STATE_ID::NO_STATE, ELEMENT_ID clone_element_id=ELEMENT_ID::NO_ELEMENT)
-    : element_id(element_id), colour_data(std::move(colour_data)), direction(ELEMENT[element_id].default_direction), state_id(state_id), flammable(flammable), temperature(temperature), fuel(fuel), life(life), branches(branches), clone_element(clone_element_id) {
+    : element_id(element_id), colour_data(std::move(colour_data)), direction(DIRECTION::NONE), state_id(state_id), flammable(flammable), temperature(temperature), fuel(fuel), life(life), branches(branches), clone_element(clone_element_id) {
     colour_data->set_base_colour(colour_data->param_red, colour_data->param_green, colour_data->param_blue);
   }
+
+  
 
   // void update_colour() {
   //   if COLOURMODE::NOISE
@@ -171,21 +168,40 @@ public:
   //   return [r, g, b]
   // }
 };
-
+// dependency on Cell class
 struct grid_return {
   byte x;
   byte y;
-  Cell cell;
+  Cell* cell;
+};
+
+constexpr byte width = 32;
+constexpr byte height = 16;
+//Cell grid[width][height];
+
+class Grid {
+public:
+  static constexpr byte WIDTH = 32;
+  static constexpr byte HEIGHT = 16;
+  std::array<std::array<Cell, HEIGHT>, WIDTH> grid;
+  //    _ = ["Cell(air, temperature=23)" for _ in range(height)]
+  //    self.grid = [_ for _ in range(width)]
+  Grid() {}
+
+  Cell& get(byte x, byte y) {
+    return grid[x][y];
+  }
+
 };
 
 class Particle {
 public:
-  const String name;
+  const ELEMENT_ID element_id;
   const Colour colour_params;
   const DIRECTION default_direction;
 
-  Particle(String name, Colour colour_params, DIRECTION default_direction = DIRECTION::NONE)
-    : name(name), colour_params(colour_params), default_direction(default_direction) {}
+  Particle(ELEMENT_ID element_id, Colour colour_params, DIRECTION default_direction = DIRECTION::NONE)
+    : element_id(element_id), colour_params(colour_params), default_direction(default_direction) {}
 
   virtual ~Particle() {}  // Virtual destructor for polymorphism
 };
@@ -197,8 +213,8 @@ public:
   const float thermal_conductivity;
   const DIRECTION default_direction;
 
-  Updatable(String name, Colour colour_data, std::array<int, 2> phase_change_temp, std::array<ELEMENT_ID, 2> next_phase, float thermal_conductivity, DIRECTION default_direction = DIRECTION::NONE)
-    : Particle(name, colour_data), phase_change_temp(phase_change_temp), next_phase(next_phase), thermal_conductivity(thermal_conductivity), default_direction(default_direction) {}
+  Updatable(ELEMENT_ID element_id, Colour colour_data, std::array<int, 2> phase_change_temp, std::array<ELEMENT_ID, 2> next_phase, float thermal_conductivity, DIRECTION default_direction = DIRECTION::NONE)
+    : Particle(element_id, colour_data), phase_change_temp(phase_change_temp), next_phase(next_phase), thermal_conductivity(thermal_conductivity), default_direction(default_direction) {}
 
   virtual ~Updatable() {}  // Virtual destructor for polymorphism
 
@@ -228,8 +244,8 @@ public:
   float density;
   DIRECTION default_direction;
 
-  Solid(String name, Colour colour_data, COLOURMODE colour_mode, std::array<int, 2> phase_change_temp, std::array<ELEMENT_ID, 2> next_phase, float thermal_conductivity, float density, DIRECTION default_direction = DIRECTION::True)
-    : Updatable(name, colour_data, phase_change_temp, next_phase, thermal_conductivity), density(density), default_direction(default_direction) {}
+  Solid(ELEMENT_ID element_id, Colour colour_data, COLOURMODE colour_mode, std::array<int, 2> phase_change_temp, std::array<ELEMENT_ID, 2> next_phase, float thermal_conductivity, float density, DIRECTION default_direction = DIRECTION::True)
+    : Updatable(element_id, colour_data, phase_change_temp, next_phase, thermal_conductivity), density(density), default_direction(default_direction) {}
 
   // void move(Grid grid, byte x, byte y) {
   //   coordinate_return gaps[2] = grid.check_unimpeded(x, y);
@@ -255,42 +271,21 @@ public:
   //     }
   //   }
   };
-};
 
-
-
-/*
-
-static const std::map<ELEMENT_ID, std::array<std::array<byte, 2>, 3>> element_params = {
-    {ELEMENT_ID::WATER, {{ {0, 50}, {100, 150}, {200, 255} }}},  // Red, Green, Blue
-    {ELEMENT_ID::AIR,   {{ {200, 255}, {200, 255}, {255, 255} }}},
-    // Add more elements...
-};
+Solid* stone = new Solid(
+  ELEMENT_ID::STONE,
+  Colour({0, 0}, {0, 0}, {0, 0}, COLOURMODE::SOLID),
+  COLOURMODE::SOLID,
+  {0, 100},  // temperature range
+  {ELEMENT_ID::METAL, ELEMENT_ID::LAVA}, // phase changes
+  0.1f,     // thermal conductivity
+  10.0f,    // density
+  DIRECTION::True
+);
 
 Particle* ELEMENT[] = {
-    new Gas(
-        ELEMENT_ID::AIR,
-        element_params.at(ELEMENT_ID::AIR),     // Retrieve shared parameters for AIR
-        COLOURMODE::SOLID,
-        { ELEMENT_ID::NONE, ELEMENT_ID::NONE }
-    ),
-    new Gas(
-        ELEMENT_ID::WATER,
-        element_params.at(ELEMENT_ID::WATER),  // Retrieve shared parameters for WATER
-        COLOURMODE::SOLID,
-        { ELEMENT_ID::NONE, ELEMENT_ID::NONE }
-    ),
-    // Add more materials...
+  stone,
 };
-
-*/
-
-
-
-enum STATE {
-  // BURNING = ,
-  // DECAY = ,
-}
 
 void setup() {
   // put your setup code here, to run once:
