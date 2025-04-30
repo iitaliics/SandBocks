@@ -57,6 +57,8 @@ enum class ELEMENT_ID {
 
 constexpr int ELEMENT_COUNT = static_cast<byte>(ELEMENT_ID::ELEMENT_ID_ENUM_COUNT);
 
+constexpr byte INVALID_BYTE = 255;
+
 enum class STATE_ID {
   NO_STATE,
   BURNING,
@@ -206,18 +208,23 @@ public:
   //   return [r, g, b]
   // }
 };
+
 // dependency on Cell class
 struct grid_return {
   byte x;
   byte y;
   Cell* cell;
+
+  grid_return()
+    : x(INVALID_BYTE), y(INVALID_BYTE), cell(nullptr) {}
+  grid_return(byte x, byte y, Cell* cell)
+    : x(x), y(y), cell(cell) {}
 };
 
 constexpr byte width = 32;
 constexpr byte height = 16;
 //Cell grid[width][height];
 
-constexpr byte INVALID_BYTE = 255;
 
 inline bool is_valid_coordinate(const coordinate_return& coord) {  //Is the returned coordinate a proper value
   return coord.x != INVALID_BYTE || coord.y != INVALID_BYTE;
@@ -246,7 +253,9 @@ public:
   }
 
   void draw(byte x, byte y, Cell pixel, float probability) {
-    if (is_empty(x, y) && RandomUtils::getRandomBool(probability))
+    if (is_empty(x, y) && RandomUtils::getRandomBool(probability)) {
+      set(x, y, pixel);
+    }
   }
 
   inline bool in_bounds(byte x, byte y) {
@@ -292,7 +301,7 @@ public:
           continue;
         }
         if (in_bounds(x + dx, y + dy)) {
-          neighbour_list[count] = { x + dx, y + dy, get(x + dx, y + dy) };
+          neighbour_list[count] = grid_return(x + dx, y + dy, &get(x + dx, y + dy));
         }
         count++;
       }
@@ -326,10 +335,10 @@ public:
 
   std::array<byte, 2> check_side_gap_distance(byte x, byte y) {
     // Measured from the x coordinate, the distance to the closest side gap
-    std::array<byte, 2> side_gaps = {0, 0};
-    int8_t direction = static_cast<int8_t>(get(x, y).direction)
+    std::array<byte, 2> side_gaps = { 0, 0 };
+    int8_t direction = static_cast<int8_t>(get(x, y).direction);
     if (direction != 0) {
-      if (!in_bounds(x, y+direction)) {
+      if (!in_bounds(x, y + direction)) {
         return side_gaps;
       }
 
@@ -350,7 +359,7 @@ public:
             break;
           }
           if (current_layer_gap) {
-            side_gaps[0]  = (i + 1);
+            side_gaps[0] = (i + 1);
           }
         }
       }
@@ -359,7 +368,7 @@ public:
       if (x != WIDTH - 1) {
         for (byte i = 1; i < WIDTH - x; i++) {
           next_layer_gap = can_swap(x, y, x + i, y + direction);
-          current_layer_left_gap = can_swap(x, y, x + i, y);
+          current_layer_gap = can_swap(x, y, x + i, y);
 
           if (next_layer_gap && current_layer_gap) {
             side_gaps[1] = i;
@@ -369,13 +378,39 @@ public:
             break;
           }
           if (current_layer_gap) {
-            side_gaps[1]  = i;
+            side_gaps[1] = i;
           }
         }
       }
-
     }
     return side_gaps;
+  }
+
+  float get_new_temperature_difference(byte x, byte y);
+
+  std::array<std::array<int16_t, 3>, (WIDTH * HEIGHT)> get_pixel_temperatures() {
+    uint16_t count = 0;
+    std::array<std::array<int16_t, 3>, (WIDTH * HEIGHT)> temperature_changes;
+    for (byte row = 0; row < HEIGHT; row++) {
+      if (RandomUtils::getRandomBool()) {
+        for (byte column = 0; column < WIDTH; column++) {
+          std::array<int16_t, 3> temp_data = { static_cast<int16_t>(column),
+                                               static_cast<int16_t>(row),
+                                               get_new_temperature_difference(column, row) };
+          temperature_changes[count] = temp_data;
+          count++;
+        }
+      } else {
+        for (byte column = 0; column < WIDTH; column++) {
+          std::array<int16_t, 3> temp_data = { static_cast<int16_t>(WIDTH - column - 1),
+                                               static_cast<int16_t>(row),
+                                               get_new_temperature_difference(WIDTH - column - 1, row) };
+          temperature_changes[count] = temp_data;
+          count++;
+        }
+      }
+    }
+    return temperature_changes;
   }
 
   void print() {
@@ -415,6 +450,15 @@ inline bool isUpdatable(Particle* particle) {
   // TODO implement all other materials
 }
 
+inline Particle* getElementDataFromElementID(ELEMENT_ID element_id) {
+  Particle* element = ELEMENT[static_cast<uint8_t>(element_id)];
+  return element;
+}
+
+inline Particle* getElementDataFromCell(Cell* cell) {
+  return getElementDataFromElementID(cell->element_id);
+}
+
 
 class Updatable : public Particle {
 public:
@@ -432,7 +476,7 @@ public:
 
   virtual ~Updatable() {}  // Virtual destructor for polymorphism
 
-  void act(Grid grid, byte x, byte y) {
+  void act(Grid& grid, byte x, byte y) {
     Cell& cell = grid.get(x, y);
     int current_temp = cell.temperature;
 
@@ -473,7 +517,7 @@ public:
     return PARTICLETYPE::SOLID;
   }
 
-  void move(Grid grid, byte x, byte y) {
+  void move(Grid& grid, byte x, byte y) {
     std::array<coordinate_return, 3> gaps = grid.check_unimpeded(x, y);
 
     byte x2 = gaps[1].x;
@@ -521,6 +565,36 @@ Particle* ELEMENT[ELEMENT_COUNT] = {
   stone,
 };
 
+float Grid::get_new_temperature_difference(byte x, byte y) {
+  Cell& current_pixel = get(x, y);
+  Particle* current_element = getElementDataFromCell(&current_pixel);
+
+  if (!isUpdatable(current_element)) {
+    return 0;
+  }
+
+  auto neighbours = check_surroundings(x, y);
+  float sum_influence = 0;
+  uint8_t updatable_neighbour_count = 0;
+
+  for (auto& data : neighbours) {
+    Cell* neighbour = data.cell;
+    if (neighbour) {
+      Particle* p2 = getElementDataFromCell(neighbour);
+      if (isUpdatable(p2)) {
+        updatable_neighbour_count++;
+        float t_diff = neighbour->temperature - current_pixel.temperature;
+        float k1 = static_cast<Updatable*>(current_element)->thermal_conductivity;
+        float k2 = static_cast<Updatable*>(p2)->thermal_conductivity;
+        sum_influence += t_diff * ((k1 * k2) / (k1 + k2));
+      }
+    }
+  }
+  return (updatable_neighbour_count > 0)
+           ? (sum_influence / updatable_neighbour_count)
+           : 0;
+}
+
 Cell createCellInstance(ELEMENT_ID id,
                         float temperature = 23,
                         STATE_ID state_id = STATE_ID::NO_STATE,
@@ -529,24 +603,11 @@ Cell createCellInstance(ELEMENT_ID id,
                         byte life = 0,
                         byte branches = 0) {
   // Particle* element = ELEMENT[static_cast<byte>(id)]; // Access element from ELEMENT array
-
+  // TEMP remove 0 and replace with ELEMENT_ID::
   Particle* element = ELEMENT[0];  // Access element from ELEMENT array
-
-  // Now create and return the new element (assuming you just need an Element instance)
-  // Cell pixel;
-  // pixel.element_id = id;
-  // pixel.direction = element->default_direction;
-  // pixel.temperature = temperature;
-  // pixel.color = element->colour_data;
-  // pixel.state_id = state_id;
-  // pixel.flammable = flammable;
-  // pixel.fuel = fuel;
-  // pixel.life = life;
-  // pixel.branches = branches;
-  // pixel.clone_element = ELEMENT_ID::NO_ELEMENT;
-
   Colour colour_copy(element->colour_data);
 
+  // pixel attribute ordering
   // id,
   // colour_copy,
   // direction,
