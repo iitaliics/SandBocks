@@ -227,7 +227,7 @@ constexpr byte height = 16;
 
 
 inline bool is_valid_coordinate(const coordinate_return& coord) {  //Is the returned coordinate a proper value
-  return coord.x != INVALID_BYTE || coord.y != INVALID_BYTE;
+  return coord.x != INVALID_BYTE && coord.y != INVALID_BYTE;
 }
 
 
@@ -235,7 +235,6 @@ class Grid {
 public:
   static constexpr byte WIDTH = 32;
   static constexpr byte HEIGHT = 16;
-  std::array<std::array<Cell, HEIGHT>, WIDTH> grid;
   //    _ = ["Cell(air, temperature=23)" for _ in range(height)]
   //    self.grid = [_ for _ in range(width)]
   Grid() {}
@@ -306,6 +305,7 @@ public:
         count++;
       }
     }
+    return neighbour_list;
   }
 
   std::array<coordinate_return, 3> check_unimpeded(byte x, byte y) {
@@ -388,78 +388,66 @@ public:
 
   float get_new_temperature_difference(byte x, byte y);
 
-  std::array<std::array<float, 3>, (WIDTH * HEIGHT)> get_pixel_temperatures() {
+  void get_pixel_temperatures() {
     uint16_t count = 0;
-    std::array<std::array<float, 3>, (WIDTH * HEIGHT)> temperature_changes;
-    for (byte row = 0; row < HEIGHT; row++) {
-      if (RandomUtils::getRandomBool()) {
-        for (byte column = 0; column < WIDTH; column++) {
-          std::array<float, 3> temp_data = { static_cast<float>(column),
-                                               static_cast<float>(row),
-                                               get_new_temperature_difference(column, row) };
-          temperature_changes[count] = temp_data;
-          count++;
-        }
-      } else {
-        for (byte column = 0; column < WIDTH; column++) {
-          std::array<float, 3> temp_data = { static_cast<float>(WIDTH - column - 1),
-                                               static_cast<float>(row),
-                                               get_new_temperature_difference(WIDTH - column - 1, row) };
-          temperature_changes[count] = temp_data;
-          count++;
-        }
+    for (uint8_t row = 0; row < HEIGHT; ++row) {
+      bool forward = RandomUtils::getRandomBool();
+      for (uint8_t col = 0; col < WIDTH; ++col) {
+        uint8_t x = forward ? col : (WIDTH - 1 - col);
+        float delta = get_new_temperature_difference(x, row);
+        temperature_data[count++] = { float(x), float(row), delta };
       }
     }
-    return temperature_changes;
   }
 
-  std::array<std::array<uint8_t, 3>, (WIDTH * HEIGHT)> get_moving(bool direction) {
-    // Returns array { x coord, y coord, (1 if direction matches input direction, else 0) }
-    std::array<std::array<uint8_t, 3>, (WIDTH * HEIGHT)> location_and_direction;
-
+  void get_moving(bool up) {
     uint16_t count = 0;
+    DIRECTION check = up ? DIRECTION::True : DIRECTION::False;
 
-    DIRECTION check = (direction) ? DIRECTION::True : DIRECTION::False;
-
-    for (byte row = 0; row < HEIGHT; row++) {
-      if (RandomUtils::getRandomBool()) {
-        for (byte column = 0; column < WIDTH; column++) {
-          DIRECTION cell_direction = get(column, row).direction;
-          std::array<uint8_t, 3> temp_data = { column,
-                                               row,
-                                               (cell_direction == check ? 1 : 0) };
-          location_and_direction[count] = temp_data;
-          count++;
+    for (uint8_t row = 0; row < HEIGHT; ++row) {
+      bool forward = RandomUtils::getRandomBool();
+      for (uint8_t col = 0; col < WIDTH; ++col) {
+        uint8_t x = forward ? col : (WIDTH - 1 - col);
+        if (!in_bounds(x, row)) {
+          moving_data[count++] = { 0, 0, 0 };
+          continue;
         }
-      } else {
-        for (byte column = 0; column < WIDTH; column++) {
-          DIRECTION cell_direction = get(column - WIDTH - 1, row).direction;
-          std::array<uint8_t, 3> temp_data = { column - WIDTH - 1,
-                                               row,
-                                               (cell_direction == check ? 1 : 0) };
-          location_and_direction[count] = temp_data;
-          count++;
-        }
+        DIRECTION cell_dir = get(x, row).direction;
+        moving_data[count++] = { x, row, static_cast<uint8_t>(cell_dir == check) };
       }
     }
-    return location_and_direction;
   }
 
   void perform_pixel_behaviour();
 
   void print() {
-    for (byte i = 0; i < WIDTH; i++) {
-      for (byte j = 0; j < HEIGHT; j++) {
-        Cell& cell = get(i, j);
+    for (byte i = 0; i < HEIGHT; i++) {
+      char str[WIDTH * 2 + 1];
+      for (byte j = 0; j < WIDTH; j++) {
+        Cell& cell = get(j, HEIGHT - 1 - i);
         if (cell.element_id == ELEMENT_ID::STONE) {
-          Serial.print(" X ");
+          str[j * 2] = 'O';
         } else {
-          Serial.print("   ");
+          str[j * 2] = '.';
         }
+        str[j * 2 + 1] = ' ';
       }
+      str[64] = '\0';
+      Serial.println(str);
     }
     Serial.println("_______________________________________________");
   }
+private:
+  std::array<std::array<Cell, HEIGHT>, WIDTH> grid;
+
+  // hoisted buffers — no longer locals
+  std::array<std::array<float, 3>, WIDTH * HEIGHT> temperature_data;
+  std::array<std::array<uint8_t, 3>, WIDTH * HEIGHT> moving_data;
+
+  // fill temperature_data in place
+  void compute_pixel_temperatures();
+  // fill moving_data in place (up or down)
+  void compute_moving(bool up);
 };
 
 class Particle {
@@ -477,11 +465,11 @@ public:
 
   virtual void move(Grid& grid, byte x, byte y) {
     // Default: do nothing
-}
+  }
 
   virtual void act(Grid& grid, byte x, byte y) {
     // Default: do nothing
-}
+  }
 
   virtual ~Particle() {}  // Virtual destructor for polymorphism
 };
@@ -493,7 +481,8 @@ inline bool isUpdatable(Particle* particle) {
 }
 
 inline Particle* getElementDataFromElementID(ELEMENT_ID element_id) {
-  Particle* element = ELEMENT[static_cast<uint8_t>(element_id)];
+  Particle* element = ELEMENT[0];
+  // Particle* element = ELEMENT[static_cast<uint8_t>(element_id)];
   return element;
 }
 
@@ -522,7 +511,8 @@ public:
     Cell& cell = grid.get(x, y);
     int current_temp = cell.temperature;
 
-    Particle* particle = ELEMENT[static_cast<byte>(cell.element_id)];
+    Particle* particle = ELEMENT[0]; //ONCE ALL MATERIALS ARE ADDED FIX THIS
+    // Particle* particle = ELEMENT[static_cast<byte>(cell.element_id)];
     if (!isUpdatable(particle)) {  // SOLID inherits from UPDATABLE
       return;
       // safe to use
@@ -553,7 +543,7 @@ public:
   DIRECTION default_direction;
 
   Solid(ELEMENT_ID element_id, ColourParameters colour_data, std::array<float, 2> phase_change_temp, std::array<ELEMENT_ID, 2> next_phase, float thermal_conductivity, float density, DIRECTION default_direction = DIRECTION::True)
-    : Updatable(element_id, colour_data, phase_change_temp, next_phase, thermal_conductivity), density(density), default_direction(default_direction) {}
+    : Updatable(element_id, colour_data, phase_change_temp, next_phase, thermal_conductivity, default_direction), density(density), default_direction(default_direction) {}
 
   virtual PARTICLETYPE getType() const override {
     return PARTICLETYPE::SOLID;
@@ -603,6 +593,10 @@ Solid* stone = new Solid(
   10.0f,                                    // density
   DIRECTION::True);
 
+// Particle* ELEMENT[ELEMENT_COUNT] = {
+//   stone,
+// };
+
 Particle* ELEMENT[ELEMENT_COUNT] = {
   stone,
 };
@@ -638,10 +632,11 @@ float Grid::get_new_temperature_difference(byte x, byte y) {
 }
 
 void Grid::perform_pixel_behaviour() {
-  std::array<std::array<int16_t, 3> temperature_data = get_pixel_temperatures();
-  for (<std::array<int16_t, 3> temperature_entry : temperature_data) {
+  get_pixel_temperatures();
+  for (auto& temperature_entry : temperature_data) {
     uint8_t x = static_cast<uint8_t>(temperature_entry[0]);
     uint8_t y = static_cast<uint8_t>(temperature_entry[1]);
+    if (!in_bounds(x, y)) continue;
     float temperature_delta = temperature_entry[2];
     Cell& cell = get(x, y);
     cell.temperature += temperature_delta;
@@ -652,31 +647,37 @@ void Grid::perform_pixel_behaviour() {
 
     Particle* current_element = getElementDataFromCell(&cell);
 
-    current_element->act(grid, x, y)
+    current_element->act(*this, x, y);
     // TODO update colour?
   }
 
-  std::array<std::array<uint8_t, 3>, (Grid::WIDTH * Grid::HEIGHT)> update_list = get_moving(true); //up moving
-  for (std::array<uint8_t, 3> up_moving_entry : update_list) {
-    if (static_cast<bool>(up_moving_entry[2])) {
-      uint8_t x = up_moving_entry[0];
-      uint8_t y = up_moving_entry[1];
 
-      Cell& cell = get(x, y);
-      Particle* current_element = getElementDataFromCell(&cell);
-      current_element->move(grid, x, y)
-    }
+  // — up-moving pass —
+  get_moving(true);
+  for (auto& m : moving_data) {
+    uint8_t x = m[0], y = m[1];
+    // bail out if out-of-bounds or not flagged to move
+    if (!in_bounds(x, y) || !m[2])
+      continue;
 
-  update_list = get_moving(false); //down moving
-  for (std::array<uint8_t, 3> down_moving_entry : update_list) {
-    if (static_cast<bool>(down_moving_entry[2])) {
-      uint8_t x = down_moving_entry[0];
-      uint8_t y = down_moving_entry[1];
+    // 1) get the cell
+    Cell& cell = get(x, y);
+    // 2) pull out the Particle* for that cell
+    Particle* element = getElementDataFromCell(&cell);
+    // 3) call its move()
+    element->move(*this, x, y);
+  }
 
-      Cell& cell = get(x, y);
-      Particle* current_element = getElementDataFromCell(&cell);
-      current_element->move(grid, x, y)
-    }
+  // — down-moving pass —
+  get_moving(false);
+  for (auto& m : moving_data) {
+    uint8_t x = m[0], y = m[1];
+    if (!in_bounds(x, y) || !m[2])
+      continue;
+
+    Cell& cell = get(x, y);
+    Particle* element = getElementDataFromCell(&cell);
+    element->move(*this, x, y);
   }
 }
 
@@ -726,10 +727,55 @@ void setup() {
   // put your setup code here, to run once:
   Serial.begin(9600);
   Cell test = createCellInstance(ELEMENT_ID::STONE);
-  grid.set(5, 5, test);
+  grid.set(5, 5, test);    //This one is in the bottom corner
+  // grid.set(20, 14, test);  //This one is in the top right corner
+  // grid.set(32, 16, test); //This one is missing from the grid.print
+  // grid.set(0, 0, test); //This one is missing from the grid.print
 }
 
 void loop() {
+  // Serial.println("TEST");
+  Serial.println("frame ---------------");
+  // grid.perform_pixel_behaviour();
+  
+  Serial.println("attempting in_bounds ---------------");
+  Serial.println(grid.in_bounds(0, 0));
+  Serial.println(grid.in_bounds(31, 15));
+  Serial.println(grid.in_bounds(32, 32));
+  Serial.println("success ---------------");
+
+  Serial.println("attempting get ---------------");
+  grid.get(0, 0);
+  Cell& cell = grid.get(31, 15);
+  Serial.println("success ---------------");
+
+  Serial.println("attempting get getElementDataFromCell ---------------");
+  Particle* current_element = getElementDataFromCell(&cell);
+  Serial.println("success ---------------");
+
+  Serial.println("attempting get temp data ---------------");
+  grid.get_pixel_temperatures();
+  Serial.println("success ---------------");
+
+  Serial.println("attempting particle act ---------------");
+  current_element->act(grid, 5, 5);
+  Serial.println("success ---------------");
+
+  Serial.println("attempting get_moving true ---------------");
+  grid.get_moving(true);
+  Serial.println("success ---------------");
+
+  Serial.println("attempting get_moving false ---------------");
+  grid.get_moving(false);
+  Serial.println("success ---------------");
+
+  
+  Serial.println("attempting moving ---------------");
+  current_element->move(grid, 5, 5);
+  Serial.println("success ---------------");
+
+
+  // grid.swap(5, 0, 5, 5);
   grid.print();
   // put your main code here, to run repeatedly:
 }
