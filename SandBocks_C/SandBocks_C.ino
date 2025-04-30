@@ -94,6 +94,27 @@ struct coordinate_return {
   byte y;
 };
 
+struct ColourParameters {
+  std::array<byte, 2> param_red;
+  std::array<byte, 2> param_green;
+  std::array<byte, 2> param_blue;
+  COLOURMODE colour_mode = COLOURMODE::STATIC;
+
+  ColourParameters(std::array<byte, 2> r, std::array<byte, 2> g, std::array<byte, 2> b, COLOURMODE mode)
+    : param_red(r), param_green(g), param_blue(b), colour_mode(mode) {}
+};
+
+//  If scope allows it, this will contain the data that the clone material will use
+struct CloneData {
+  ELEMENT_ID element_id;
+  STATE_ID state_id;
+  bool flammable;
+  float temperature;
+  byte fuel;
+  byte life;
+  byte branches;
+};
+
 // Random
 namespace RandomUtils {
 // Random engine and distribution seed
@@ -119,9 +140,9 @@ bool getRandomBool(float trueProbability = 0.5f) {
 // classes
 class Colour {
 public:
-  const std::array<byte, 2> param_red;
-  const std::array<byte, 2> param_green;
-  const std::array<byte, 2> param_blue;
+  std::array<byte, 2> param_red;
+  std::array<byte, 2> param_green;
+  std::array<byte, 2> param_blue;
 
   byte base_red;
   byte base_green;
@@ -129,12 +150,12 @@ public:
 
   COLOURMODE colour_mode;
 
-  Colour(std::array<byte, 2> param_red, std::array<byte, 2> param_green, std::array<byte, 2> param_blue, COLOURMODE colour_mode = COLOURMODE::STATIC)
-    : param_red(param_red), param_green(param_green), param_blue(param_blue), colour_mode(colour_mode) {
-    set_base_colour(param_red, param_green, param_blue);
+  Colour(const ColourParameters& params)
+    : param_red(params.param_red), param_green(params.param_green), param_blue(params.param_blue), colour_mode(params.colour_mode) {
+    set_base_colour();
   }
 
-  void set_base_colour(std::array<byte, 2> param_red, std::array<byte, 2> param_green, std::array<byte, 2> param_blue) {
+  void set_base_colour() {
     this->base_red = (param_red[1] == 0) ? param_red[0] : RandomUtils::getRandomByte(param_red[0], param_red[1]);
     this->base_green = (param_green[1] == 0) ? param_green[0] : RandomUtils::getRandomByte(param_green[0], param_green[1]);
     this->base_blue = (param_blue[1] == 0) ? param_blue[0] : RandomUtils::getRandomByte(param_blue[0], param_blue[1]);
@@ -144,11 +165,11 @@ public:
 class Cell {
 public:
   ELEMENT_ID element_id;
-  std::unique_ptr<Colour> colour_data;  // Smart pointer for automatic memory management
+  Colour colour_data;
   DIRECTION direction;
   STATE_ID state_id;
   bool flammable;
-  int temperature;
+  float temperature;
   byte fuel;
   byte life;
   byte branches;
@@ -156,19 +177,19 @@ public:
 
   Cell()
     : element_id(ELEMENT_ID::AIR),  // default to AIR
-      colour_data(std::make_unique<Colour>(std::array<byte, 2>{ 0, 0 }, std::array<byte, 2>{ 0, 0 }, std::array<byte, 2>{ 0, 0 }, COLOURMODE::SOLID)),
+      colour_data(Colour(ColourParameters({ 0, 0 }, { 0, 0 }, { 0, 0 }, COLOURMODE::SOLID))),
       direction(DIRECTION::NONE),
       state_id(STATE_ID::NO_STATE),
       flammable(false),
-      temperature(0),
+      temperature(23.0),
       fuel(0),
       life(0),
       branches(0),
       clone_element(ELEMENT_ID::NO_ELEMENT) {}
 
-  Cell(ELEMENT_ID element_id, std::unique_ptr<Colour> colour_data, bool flammable, int temperature, byte fuel, byte life, byte branches, STATE_ID state_id = STATE_ID::NO_STATE, ELEMENT_ID clone_element_id = ELEMENT_ID::NO_ELEMENT)
-    : element_id(element_id), colour_data(std::move(colour_data)), direction(DIRECTION::NONE), state_id(state_id), flammable(flammable), temperature(temperature), fuel(fuel), life(life), branches(branches), clone_element(clone_element_id) {
-    colour_data->set_base_colour(colour_data->param_red, colour_data->param_green, colour_data->param_blue);
+  Cell(ELEMENT_ID element_id, Colour colour_data, DIRECTION direction = DIRECTION::NONE, bool flammable = false, float temperature = 23.0, byte fuel = 0, byte life = 0, byte branches = 0, STATE_ID state_id = STATE_ID::NO_STATE, ELEMENT_ID clone_element_id = ELEMENT_ID::NO_ELEMENT)
+    : element_id(element_id), colour_data(colour_data), direction(direction), state_id(state_id), flammable(flammable), temperature(temperature), fuel(fuel), life(life), branches(branches), clone_element(clone_element_id) {
+    this->colour_data.set_base_colour();
   }
 
   void update_colour_from_state_change() {
@@ -216,8 +237,16 @@ public:
     return grid[x][y];
   }
 
-  void set(byte x, byte y, ELEMENT_ID element_id) {
-    grid[x][y] = cell;
+  void set(byte x, byte y, Cell pixel) {
+    grid[x][y] = pixel;
+  }
+
+  bool is_empty(byte x, byte y) {
+    return (get(x, y).element_id == ELEMENT_ID::AIR);
+  }
+
+  void draw(byte x, byte y, Cell pixel, float probability) {
+    if (is_empty(x, y) && RandomUtils::getRandomBool(probability))
   }
 
   inline bool in_bounds(byte x, byte y) {
@@ -242,6 +271,32 @@ public:
 
   inline void swap(byte x1, byte y1, byte x2, byte y2) {
     std::swap(grid[x1][y1], grid[x2][y2]);
+  }
+
+  std::array<grid_return, 8> check_surroundings(byte x, byte y) {
+    std::array<int8_t, 3> delta = { -1, 0, 1 };
+    std::array<grid_return, 8> neighbour_list = { { { INVALID_BYTE, INVALID_BYTE, nullptr },
+                                                    { INVALID_BYTE, INVALID_BYTE, nullptr },
+                                                    { INVALID_BYTE, INVALID_BYTE, nullptr },
+                                                    { INVALID_BYTE, INVALID_BYTE, nullptr },
+                                                    { INVALID_BYTE, INVALID_BYTE, nullptr },
+                                                    { INVALID_BYTE, INVALID_BYTE, nullptr },
+                                                    { INVALID_BYTE, INVALID_BYTE, nullptr },
+                                                    { INVALID_BYTE, INVALID_BYTE, nullptr } } };
+
+    byte count = 0;
+    for (int8_t dx : delta) {
+      for (int8_t dy : delta) {
+        if (dx == 0 && dy == 0) {
+          count++;
+          continue;
+        }
+        if (in_bounds(x + dx, y + dy)) {
+          neighbour_list[count] = { x + dx, y + dy, get(x + dx, y + dy) };
+        }
+        count++;
+      }
+    }
   }
 
   std::array<coordinate_return, 3> check_unimpeded(byte x, byte y) {
@@ -269,6 +324,60 @@ public:
     return gap_list;  //middle value will guaranteed be invalid
   }
 
+  std::array<byte, 2> check_side_gap_distance(byte x, byte y) {
+    // Measured from the x coordinate, the distance to the closest side gap
+    std::array<byte, 2> side_gaps = {0, 0};
+    int8_t direction = static_cast<int8_t>(get(x, y).direction)
+    if (direction != 0) {
+      if (!in_bounds(x, y+direction)) {
+        return side_gaps;
+      }
+
+      bool current_layer_gap = false;
+      bool next_layer_gap = false;
+
+      // Left Side
+      if (x != 0) {
+        for (byte i = 0; i < x; i++) {
+          next_layer_gap = can_swap(x, y, x - (i + 1), y + direction);
+          current_layer_gap = can_swap(x, y, x - (i + 1), y);
+
+          if (next_layer_gap && current_layer_gap) {
+            side_gaps[0] = (i + 1);
+            break;
+          }
+          if (!current_layer_gap) {
+            break;
+          }
+          if (current_layer_gap) {
+            side_gaps[0]  = (i + 1);
+          }
+        }
+      }
+
+      // right Side
+      if (x != WIDTH - 1) {
+        for (byte i = 1; i < WIDTH - x; i++) {
+          next_layer_gap = can_swap(x, y, x + i, y + direction);
+          current_layer_left_gap = can_swap(x, y, x + i, y);
+
+          if (next_layer_gap && current_layer_gap) {
+            side_gaps[1] = i;
+            break;
+          }
+          if (!current_layer_gap) {
+            break;
+          }
+          if (current_layer_gap) {
+            side_gaps[1]  = i;
+          }
+        }
+      }
+
+    }
+    return side_gaps;
+  }
+
   void print() {
     for (byte i = 0; i < WIDTH; i++) {
       for (byte j = 0; j < HEIGHT; j++) {
@@ -287,11 +396,11 @@ public:
 class Particle {
 public:
   const ELEMENT_ID element_id;
-  const Colour colour_params;
+  const ColourParameters colour_data;
   const DIRECTION default_direction;
 
-  Particle(ELEMENT_ID element_id, Colour colour_params, DIRECTION default_direction = DIRECTION::NONE)
-    : element_id(element_id), colour_params(colour_params), default_direction(default_direction) {}
+  Particle(ELEMENT_ID element_id, ColourParameters colour_data, DIRECTION default_direction = DIRECTION::NONE)
+    : element_id(element_id), colour_data(colour_data), default_direction(default_direction) {}
 
   virtual PARTICLETYPE getType() const {
     return PARTICLETYPE::PARTICLE;
@@ -309,12 +418,12 @@ inline bool isUpdatable(Particle* particle) {
 
 class Updatable : public Particle {
 public:
-  const std::array<int, 2> phase_change_temp;
+  const std::array<float, 2> phase_change_temp;
   const std::array<ELEMENT_ID, 2> next_phase;
   const float thermal_conductivity;
   const DIRECTION default_direction;
 
-  Updatable(ELEMENT_ID element_id, Colour colour_data, std::array<int, 2> phase_change_temp, std::array<ELEMENT_ID, 2> next_phase, float thermal_conductivity, DIRECTION default_direction = DIRECTION::NONE)
+  Updatable(ELEMENT_ID element_id, ColourParameters colour_data, std::array<float, 2> phase_change_temp, std::array<ELEMENT_ID, 2> next_phase, float thermal_conductivity, DIRECTION default_direction = DIRECTION::NONE)
     : Particle(element_id, colour_data), phase_change_temp(phase_change_temp), next_phase(next_phase), thermal_conductivity(thermal_conductivity), default_direction(default_direction) {}
 
   virtual PARTICLETYPE getType() const override {
@@ -357,7 +466,7 @@ public:
   float density;
   DIRECTION default_direction;
 
-  Solid(ELEMENT_ID element_id, Colour colour_data, COLOURMODE colour_mode, std::array<int, 2> phase_change_temp, std::array<ELEMENT_ID, 2> next_phase, float thermal_conductivity, float density, DIRECTION default_direction = DIRECTION::True)
+  Solid(ELEMENT_ID element_id, ColourParameters colour_data, std::array<float, 2> phase_change_temp, std::array<ELEMENT_ID, 2> next_phase, float thermal_conductivity, float density, DIRECTION default_direction = DIRECTION::True)
     : Updatable(element_id, colour_data, phase_change_temp, next_phase, thermal_conductivity), density(density), default_direction(default_direction) {}
 
   virtual PARTICLETYPE getType() const override {
@@ -401,8 +510,7 @@ public:
 
 Solid* stone = new Solid(
   ELEMENT_ID::STONE,
-  Colour({ 0, 0 }, { 0, 0 }, { 0, 0 }, COLOURMODE::SOLID),
-  COLOURMODE::SOLID,
+  ColourParameters({ 0, 0 }, { 0, 0 }, { 0, 0 }, COLOURMODE::SOLID),
   { 0, 100 },                               // temperature range
   { ELEMENT_ID::METAL, ELEMENT_ID::LAVA },  // phase changes
   0.1f,                                     // thermal conductivity
@@ -413,20 +521,56 @@ Particle* ELEMENT[ELEMENT_COUNT] = {
   stone,
 };
 
-Element createElementInstance(ElementID id) {
-    Particle* element = ELEMENT[id]; // Access element from ELEMENT array
-    
-    // Call the setup method specific to the element type
-    element->setupProperties();
-    
-    // Now create and return the new element (assuming you just need an Element instance)
-    Element newElement;
-    newElement.ELEMENT_ID = id;
-    newElement.temperature = element->temperature;
-    newElement.color = element->color;
-    newElement.phase = element->phaseChanges[0]; // Just using the first phase for simplicity
-    
-    return newElement;
+Cell createCellInstance(ELEMENT_ID id,
+                        float temperature = 23,
+                        STATE_ID state_id = STATE_ID::NO_STATE,
+                        bool flammable = false,
+                        byte fuel = 0,
+                        byte life = 0,
+                        byte branches = 0) {
+  // Particle* element = ELEMENT[static_cast<byte>(id)]; // Access element from ELEMENT array
+
+  Particle* element = ELEMENT[0];  // Access element from ELEMENT array
+
+  // Now create and return the new element (assuming you just need an Element instance)
+  // Cell pixel;
+  // pixel.element_id = id;
+  // pixel.direction = element->default_direction;
+  // pixel.temperature = temperature;
+  // pixel.color = element->colour_data;
+  // pixel.state_id = state_id;
+  // pixel.flammable = flammable;
+  // pixel.fuel = fuel;
+  // pixel.life = life;
+  // pixel.branches = branches;
+  // pixel.clone_element = ELEMENT_ID::NO_ELEMENT;
+
+  Colour colour_copy(element->colour_data);
+
+  // id,
+  // colour_copy,
+  // direction,
+  // flammable,
+  // temperature,
+  // fuel,
+  // life,
+  // branches,
+  // state_id,
+  // clone_element_id,
+
+  Cell pixel(
+    id,
+    colour_copy,
+    element->default_direction,
+    flammable,
+    temperature,
+    fuel,
+    life,
+    branches,
+    state_id,
+    ELEMENT_ID::NO_ELEMENT);
+
+  return pixel;
 }
 
 
@@ -435,7 +579,8 @@ Grid grid;
 void setup() {
   // put your setup code here, to run once:
   Serial.begin(9600);
-  grid.set(5, 5, ELEMENT_ID::STONE)
+  Cell test = createCellInstance(ELEMENT_ID::STONE);
+  grid.set(5, 5, test);
 }
 
 void loop() {
