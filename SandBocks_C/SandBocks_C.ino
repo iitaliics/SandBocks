@@ -21,9 +21,16 @@ TODO list:
 
 
 */
+enum class ELEMENT_ID {
+  //temporary
+  AIR,
+  STONE,
+  NO_ELEMENT,
+  ELEMENT_ID_ENUM_COUNT
+};
 
 // Enum
-enum class ELEMENT_ID {
+enum class ELEMENT_ID_temp {
   //temporary
   AIR,
   STONE,
@@ -146,13 +153,13 @@ bool getRandomBool(float trueProbability = 0.5f) {
 // classes
 class Colour {
 public:
-  std::array<byte, 2> param_red;
-  std::array<byte, 2> param_green;
-  std::array<byte, 2> param_blue;
+  std::array<uint8_t, 2> param_red;
+  std::array<uint8_t, 2> param_green;
+  std::array<uint8_t, 2> param_blue;
 
-  byte base_red;
-  byte base_green;
-  byte base_blue;
+  uint8_t base_red;
+  uint8_t base_green;
+  uint8_t base_blue;
 
   COLOURMODE colour_mode;
 
@@ -717,9 +724,9 @@ public:
 // Solids
 Solid* stone = new Solid(
   ELEMENT_ID::STONE,
-  ColourParameters({ 0, 0 }, { 0, 0 }, { 0, 0 }, COLOURMODE::SOLID),
+  ColourParameters({ 0, 254 }, { 0, 254 }, { 0, 254 }, COLOURMODE::SOLID),
   { 0, 100 },                               // temperature range
-  { ELEMENT_ID::METAL, ELEMENT_ID::LAVA },  // phase changes
+  { ELEMENT_ID::NO_ELEMENT, ELEMENT_ID::NO_ELEMENT },  // phase changes
   2.5f,                                     // thermal conductivity
   2500.0f,                                  // density
   DIRECTION::DOWN);
@@ -743,8 +750,12 @@ Gas* air = new Gas(
   DIRECTION::UP);
 
 
-Particle* ELEMENT[ELEMENT_COUNT] = {
+// Particle* ELEMENT[ELEMENT_COUNT] = {
+Particle* ELEMENT[4] = {
+
   air,
+  stone,
+  stone,
   stone,
 };
 
@@ -873,6 +884,7 @@ Cell createCellInstance(ELEMENT_ID id,
                         byte branches = 0) {
 
   Particle* element = ELEMENT[static_cast<byte>(id)]; // Access element from ELEMENT array
+  
   Colour colour_copy(element->colour_data);
 
   // pixel attribute ordering
@@ -959,8 +971,8 @@ void unit_test() {
 void setup() {
   // put your setup code here, to run once:
   Serial.begin(9600);
-  Cell test = createCellInstance(ELEMENT_ID::STONE);
-  grid.set(5, 5, test);  //This one is in the bottom corner
+  // Cell test = createCellInstance(ELEMENT_ID::STONE);
+  // grid.set(5, 6, test);  //This one is in the bottom corner
   grid.print();
   // grid.set(20, 14, test);  //This one is in the top right corner
   // grid.set(32, 16, test); //This one is missing from the grid.print
@@ -969,12 +981,7 @@ void setup() {
 
 void loop() {
   // Serial.println("TEST");
-  grid.perform_pixel_behaviour();
+  // grid.perform_pixel_behaviour();
+  // Serial.println("sds");
 
-  Cell test = createCellInstance(ELEMENT_ID::STONE);
-  grid.set(5, 5, test);
-
-  grid.print();
-  // unit_test();
-  // put your main code here, to run repeatedly:
 }
