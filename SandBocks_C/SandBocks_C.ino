@@ -24,7 +24,11 @@ TODO list:
 
 // Enum
 enum class ELEMENT_ID {
+  //temporary
   AIR,
+  STONE,
+
+  // AIR,
   SAND,
   WATER,
   ICE,
@@ -34,7 +38,7 @@ enum class ELEMENT_ID {
   FIRE,
   OIL,
   LAVA,
-  STONE,
+  // STONE,
   WOOD,
   MOLTEN_METAL,
   METAL,
@@ -67,8 +71,8 @@ enum class STATE_ID {
 
 enum class DIRECTION {
   NONE = 0,
-  False = -1,
-  True = 1
+  UP = 1,
+  DOWN = -1
 };
 
 enum class COLOURMODE {
@@ -264,13 +268,11 @@ public:
     return false;
   }
 
-  inline bool can_swap(byte x1, byte y1, byte x2, byte y2) {
-    // TODO
-    return true;
-  }
+  inline bool can_swap(byte x1, byte y1, byte x2, byte y2);
 
   inline bool can_swap_after_random(byte x1, byte y1, byte x2, byte y2) {
     // """ Assumes the check has already been made to see if these can swap """
+    //TODO
     // pixel1 = grid.get(x1, y1)
     // pixel2 = grid.get(x2, y2)
     // return random.random() < (pixel1.element.density / (pixel1.element.density + pixel2.element.density))
@@ -314,7 +316,8 @@ public:
                                                   coordinate_return{ INVALID_BYTE, INVALID_BYTE } };
 
     Cell& cell = get(x, y);
-    if (get(x, y).direction != DIRECTION::NONE) {
+
+    if (cell.direction != DIRECTION::NONE) {
 
       int8_t direction = static_cast<int8_t>(cell.direction);
 
@@ -402,7 +405,7 @@ public:
 
   void get_moving(bool up) {
     uint16_t count = 0;
-    DIRECTION check = up ? DIRECTION::True : DIRECTION::False;
+    DIRECTION check = up ? DIRECTION::UP : DIRECTION::DOWN;
 
     for (uint8_t row = 0; row < HEIGHT; ++row) {
       bool forward = RandomUtils::getRandomBool();
@@ -455,9 +458,10 @@ public:
   const ELEMENT_ID element_id;
   const ColourParameters colour_data;
   const DIRECTION default_direction;
+  const float density;
 
-  Particle(ELEMENT_ID element_id, ColourParameters colour_data, DIRECTION default_direction = DIRECTION::NONE)
-    : element_id(element_id), colour_data(colour_data), default_direction(default_direction) {}
+  Particle(ELEMENT_ID element_id, ColourParameters colour_data, DIRECTION default_direction = DIRECTION::NONE, float density = 0)
+    : element_id(element_id), colour_data(colour_data), default_direction(default_direction), density(density) {}
 
   virtual PARTICLETYPE getType() const {
     return PARTICLETYPE::PARTICLE;
@@ -476,13 +480,12 @@ public:
 
 inline bool isUpdatable(Particle* particle) {
   PARTICLETYPE type = particle->getType();
-  return (type == PARTICLETYPE::UPDATABLE || type == PARTICLETYPE::SOLID);
+  return (type == PARTICLETYPE::UPDATABLE || type == PARTICLETYPE::SOLID || type == PARTICLETYPE::LIQUID || type == PARTICLETYPE::GAS);
   // TODO implement all other materials
 }
 
 inline Particle* getElementDataFromElementID(ELEMENT_ID element_id) {
-  Particle* element = ELEMENT[0];
-  // Particle* element = ELEMENT[static_cast<uint8_t>(element_id)];
+  Particle* element = ELEMENT[static_cast<uint8_t>(element_id)];
   return element;
 }
 
@@ -496,10 +499,9 @@ public:
   const std::array<float, 2> phase_change_temp;
   const std::array<ELEMENT_ID, 2> next_phase;
   const float thermal_conductivity;
-  const DIRECTION default_direction;
 
-  Updatable(ELEMENT_ID element_id, ColourParameters colour_data, std::array<float, 2> phase_change_temp, std::array<ELEMENT_ID, 2> next_phase, float thermal_conductivity, DIRECTION default_direction = DIRECTION::NONE)
-    : Particle(element_id, colour_data), phase_change_temp(phase_change_temp), next_phase(next_phase), thermal_conductivity(thermal_conductivity), default_direction(default_direction) {}
+  Updatable(ELEMENT_ID element_id, ColourParameters colour_data, std::array<float, 2> phase_change_temp, std::array<ELEMENT_ID, 2> next_phase, float thermal_conductivity, DIRECTION default_direction = DIRECTION::NONE, float density = 0)
+    : Particle(element_id, colour_data, default_direction, density), phase_change_temp(phase_change_temp), next_phase(next_phase), thermal_conductivity(thermal_conductivity) {}
 
   virtual PARTICLETYPE getType() const override {
     return PARTICLETYPE::UPDATABLE;
@@ -511,8 +513,7 @@ public:
     Cell& cell = grid.get(x, y);
     int current_temp = cell.temperature;
 
-    Particle* particle = ELEMENT[0]; //ONCE ALL MATERIALS ARE ADDED FIX THIS
-    // Particle* particle = ELEMENT[static_cast<byte>(cell.element_id)];
+    Particle* particle = ELEMENT[static_cast<byte>(cell.element_id)];
     if (!isUpdatable(particle)) {  // SOLID inherits from UPDATABLE
       return;
       // safe to use
@@ -539,11 +540,9 @@ public:
 
 class Solid : public Updatable {
 public:
-  float density;
-  DIRECTION default_direction;
 
-  Solid(ELEMENT_ID element_id, ColourParameters colour_data, std::array<float, 2> phase_change_temp, std::array<ELEMENT_ID, 2> next_phase, float thermal_conductivity, float density, DIRECTION default_direction = DIRECTION::True)
-    : Updatable(element_id, colour_data, phase_change_temp, next_phase, thermal_conductivity, default_direction), density(density), default_direction(default_direction) {}
+  Solid(ELEMENT_ID element_id, ColourParameters colour_data, std::array<float, 2> phase_change_temp, std::array<ELEMENT_ID, 2> next_phase, float thermal_conductivity, float density, DIRECTION default_direction = DIRECTION::DOWN)
+    : Updatable(element_id, colour_data, phase_change_temp, next_phase, thermal_conductivity, default_direction, density) {}
 
   virtual PARTICLETYPE getType() const override {
     return PARTICLETYPE::SOLID;
@@ -555,7 +554,52 @@ public:
     byte x2 = gaps[1].x;
     byte y2 = gaps[1].y;
 
-    if (is_valid_coordinate({ x2, y2 }) && grid.can_swap_after_random(x, y, x2, y2)) {
+    if (is_valid_coordinate({ x2, y2 }) && grid.can_swap(x, y, x2, y2) && grid.can_swap_after_random(x, y, x2, y2)) {
+      grid.swap(x, y, x2, y2);
+      return;
+    }
+
+    // Must try other free spots to the side
+    bool left_to_right = RandomUtils::getRandomBool();
+    coordinate_return chosen_gap = left_to_right ? gaps[0] : gaps[2];
+
+    x2 = chosen_gap.x;
+    y2 = chosen_gap.y;
+
+    if (is_valid_coordinate(chosen_gap) && grid.can_swap(x, y, x2, y2) && grid.can_swap_after_random(x, y, x2, y2)) {
+      grid.swap(x, y, x2, y2);
+      return;
+    }
+
+    // Try the other side if first pick failed
+    chosen_gap = left_to_right ? gaps[2] : gaps[0];
+    x2 = chosen_gap.x;
+    y2 = chosen_gap.y;
+
+    if (is_valid_coordinate(chosen_gap) && grid.can_swap(x, y, x2, y2) && grid.can_swap_after_random(x, y, x2, y2)) {
+      grid.swap(x, y, x2, y2);
+      return;
+    }
+  }
+};
+
+class Liquid : public Updatable {
+public:
+
+  Liquid(ELEMENT_ID element_id, ColourParameters colour_data, std::array<float, 2> phase_change_temp, std::array<ELEMENT_ID, 2> next_phase, float thermal_conductivity, float density, DIRECTION default_direction = DIRECTION::DOWN)
+    : Updatable(element_id, colour_data, phase_change_temp, next_phase, thermal_conductivity, default_direction, density) {}
+
+  virtual PARTICLETYPE getType() const override {
+    return PARTICLETYPE::LIQUID;
+  }
+
+  void move(Grid& grid, byte x, byte y) override {
+    std::array<coordinate_return, 3> gaps = grid.check_unimpeded(x, y);
+
+    byte x2 = gaps[1].x;
+    byte y2 = gaps[1].y;
+
+    if (is_valid_coordinate({ x2, y2 }) && grid.can_swap(x, y, x2, y2) && grid.can_swap_after_random(x, y, x2, y2)) {
       grid.swap(x, y, x2, y2);
       return;
     }
@@ -577,29 +621,168 @@ public:
     x2 = chosen_gap.x;
     y2 = chosen_gap.y;
 
-    if (is_valid_coordinate(chosen_gap) && grid.can_swap(x, y, x2, y2)) {
+    if (is_valid_coordinate(chosen_gap) && grid.can_swap(x, y, x2, y2) && grid.can_swap_after_random(x, y, x2, y2)) {
       grid.swap(x, y, x2, y2);
       return;
+    }
+
+    // Wondering behaviour
+    std::array<byte, 2> gap_distances = grid.check_side_gap_distance(x, y);
+    x2 = INVALID_BYTE;
+
+    if (gap_distances[0] > 0 && gap_distances[1] > 0 && gap_distances[0] == gap_distances[1]) {
+      x2 = x + (RandomUtils::getRandomBool() ? -1 : 1);
+    } else if (gap_distances[0] > 0 && gap_distances[1] == 0) {
+      x2 = x + (RandomUtils::getRandomBool() ? -1 : 0);
+    } else if (gap_distances[0] > 0 && gap_distances[0] < gap_distances[1]) {
+      x2 = x + (RandomUtils::getRandomBool() ? -1 : 0);
+    } else if (gap_distances[1] > 0 && gap_distances[0] == 0) {
+      x2 = x + (RandomUtils::getRandomBool() ? 0 : 1);
+    } else if (gap_distances[1] > 0 && gap_distances[1] < gap_distances[0]) {
+      x2 = x + (RandomUtils::getRandomBool() ? 0 : 1);
+    }
+
+    if (x2 != INVALID_BYTE && grid.can_swap(x, y, x2, y) && grid.can_swap_after_random(x, y, x2, y)) {
+      grid.swap(x, y, x2, y);
     }
   }
 };
 
+class Gas : public Updatable {
+public:
+
+  Gas(ELEMENT_ID element_id, ColourParameters colour_data, std::array<float, 2> phase_change_temp, std::array<ELEMENT_ID, 2> next_phase, float thermal_conductivity, float density, DIRECTION default_direction = DIRECTION::DOWN)
+    : Updatable(element_id, colour_data, phase_change_temp, next_phase, thermal_conductivity, default_direction, density) {}
+
+  virtual PARTICLETYPE getType() const override {
+    return PARTICLETYPE::GAS;
+  }
+
+  void move(Grid& grid, byte x, byte y) override {
+    std::array<coordinate_return, 3> gaps = grid.check_unimpeded(x, y);
+
+    byte x2 = gaps[1].x;
+    byte y2 = gaps[1].y;
+
+    if (is_valid_coordinate({ x2, y2 }) && grid.can_swap(x, y, x2, y2) && grid.can_swap_after_random(x, y, x2, y2)) {
+      grid.swap(x, y, x2, y2);
+      return;
+    }
+
+    // Must try other free spots to the side
+    bool left_to_right = RandomUtils::getRandomBool();
+    coordinate_return chosen_gap = left_to_right ? gaps[0] : gaps[2];
+
+    x2 = chosen_gap.x;
+    y2 = chosen_gap.y;
+
+    if (is_valid_coordinate(chosen_gap) && grid.can_swap(x, y, x2, y2)) {
+      grid.swap(x, y, x2, y2);
+      return;
+    }
+
+    // Try the other side if first pick failed
+    chosen_gap = left_to_right ? gaps[2] : gaps[0];
+    x2 = chosen_gap.x;
+    y2 = chosen_gap.y;
+
+    if (is_valid_coordinate(chosen_gap) && grid.can_swap(x, y, x2, y2) && grid.can_swap_after_random(x, y, x2, y2)) {
+      grid.swap(x, y, x2, y2);
+      return;
+    }
+
+    // Wondering behaviour
+    std::array<byte, 2> gap_distances = grid.check_side_gap_distance(x, y);
+    x2 = INVALID_BYTE;
+
+    if (gap_distances[0] > 0 && gap_distances[1] > 0 && gap_distances[0] == gap_distances[1]) {
+      x2 = x + (RandomUtils::getRandomBool() ? -1 : 1);
+    } else if (gap_distances[0] > 0 && gap_distances[1] == 0) {
+      x2 = x + (RandomUtils::getRandomBool() ? -1 : 0);
+    } else if (gap_distances[0] > 0 && gap_distances[0] < gap_distances[1]) {
+      x2 = x + (RandomUtils::getRandomBool() ? -1 : 0);
+    } else if (gap_distances[1] > 0 && gap_distances[0] == 0) {
+      x2 = x + (RandomUtils::getRandomBool() ? 0 : 1);
+    } else if (gap_distances[1] > 0 && gap_distances[1] < gap_distances[0]) {
+      x2 = x + (RandomUtils::getRandomBool() ? 0 : 1);
+    }
+
+    if (x2 != INVALID_BYTE && grid.can_swap(x, y, x2, y) && grid.can_swap_after_random(x, y, x2, y)) {
+      grid.swap(x, y, x2, y);
+    }
+  }
+};
+
+
+// Solids
 Solid* stone = new Solid(
   ELEMENT_ID::STONE,
   ColourParameters({ 0, 0 }, { 0, 0 }, { 0, 0 }, COLOURMODE::SOLID),
   { 0, 100 },                               // temperature range
   { ELEMENT_ID::METAL, ELEMENT_ID::LAVA },  // phase changes
-  0.1f,                                     // thermal conductivity
-  10.0f,                                    // density
-  DIRECTION::True);
+  2.5f,                                     // thermal conductivity
+  2500.0f,                                  // density
+  DIRECTION::DOWN);
 
 // Particle* ELEMENT[ELEMENT_COUNT] = {
 //   stone,
 // };
 
+// Liquids
+
+
+
+// Gasses
+Gas* air = new Gas(
+  ELEMENT_ID::AIR,
+  ColourParameters({ 0, 0 }, { 0, 0 }, { 0, 0 }, COLOURMODE::SOLID),
+  { 0, 0 },                                            // temperature range
+  { ELEMENT_ID::NO_ELEMENT, ELEMENT_ID::NO_ELEMENT },  // phase changes
+  0.026f,                                              // thermal conductivity
+  1.23f,                                               // density
+  DIRECTION::UP);
+
+
 Particle* ELEMENT[ELEMENT_COUNT] = {
+  air,
   stone,
 };
+
+
+bool Grid::can_swap(byte x1, byte y1, byte x2, byte y2) {
+  Cell& cell_1 = get(x1, y1);
+  Cell& cell_2 = get(x2, y2);
+
+  DIRECTION direction_1 = cell_1.direction;
+  DIRECTION direction_2 = cell_2.direction;
+
+  Particle* element_1 = ELEMENT[static_cast<byte>(cell_1.element_id)];
+  Particle* element_2 = ELEMENT[static_cast<byte>(cell_2.element_id)];
+
+  float element_1_density = element_1->density;
+  float element_2_density = element_2->density;
+
+  if (isUpdatable(element_2) && element_2_density > 0 && direction_1 != DIRECTION::NONE) {
+    if (direction_1 != element_1->default_direction) {
+      if (direction_1 == DIRECTION::DOWN && element_1_density < element_2_density) {
+        return true;
+      }
+      if (direction_1 == DIRECTION::UP && element_1_density > element_2_density) {
+        return true;
+      }
+    } else if (direction_1 != direction_2) {
+      if (direction_1 == DIRECTION::UP) {
+        return false;
+      }
+      return true;
+    } else if (direction_1 == DIRECTION::DOWN && element_1_density > element_2_density) {
+      return true;
+    } else if (direction_1 == DIRECTION::UP && element_1_density < element_2_density) {
+      return true;
+    }
+  }
+  return false;
+}
 
 float Grid::get_new_temperature_difference(byte x, byte y) {
   Cell& current_pixel = get(x, y);
@@ -688,9 +871,8 @@ Cell createCellInstance(ELEMENT_ID id,
                         byte fuel = 0,
                         byte life = 0,
                         byte branches = 0) {
-  // Particle* element = ELEMENT[static_cast<byte>(id)]; // Access element from ELEMENT array
-  // TEMP remove 0 and replace with ELEMENT_ID::
-  Particle* element = ELEMENT[0];  // Access element from ELEMENT array
+
+  Particle* element = ELEMENT[static_cast<byte>(id)]; // Access element from ELEMENT array
   Colour colour_copy(element->colour_data);
 
   // pixel attribute ordering
@@ -720,24 +902,12 @@ Cell createCellInstance(ELEMENT_ID id,
   return pixel;
 }
 
-
 Grid grid;
 
-void setup() {
-  // put your setup code here, to run once:
-  Serial.begin(9600);
-  Cell test = createCellInstance(ELEMENT_ID::STONE);
-  grid.set(5, 5, test);    //This one is in the bottom corner
-  // grid.set(20, 14, test);  //This one is in the top right corner
-  // grid.set(32, 16, test); //This one is missing from the grid.print
-  // grid.set(0, 0, test); //This one is missing from the grid.print
-}
-
-void loop() {
-  // Serial.println("TEST");
+void unit_test() {
   Serial.println("frame ---------------");
   // grid.perform_pixel_behaviour();
-  
+
   Serial.println("attempting in_bounds ---------------");
   Serial.println(grid.in_bounds(0, 0));
   Serial.println(grid.in_bounds(31, 15));
@@ -746,11 +916,15 @@ void loop() {
 
   Serial.println("attempting get ---------------");
   grid.get(0, 0);
-  Cell& cell = grid.get(31, 15);
+  Cell& cell = grid.get(5, 5);
   Serial.println("success ---------------");
 
   Serial.println("attempting get getElementDataFromCell ---------------");
   Particle* current_element = getElementDataFromCell(&cell);
+  Serial.println("success ---------------");
+
+  Serial.println("attempting get direction ---------------");
+  Serial.println(static_cast<int8_t>(current_element->default_direction));
   Serial.println("success ---------------");
 
   Serial.println("attempting get temp data ---------------");
@@ -769,13 +943,38 @@ void loop() {
   grid.get_moving(false);
   Serial.println("success ---------------");
 
-  
+
   Serial.println("attempting moving ---------------");
   current_element->move(grid, 5, 5);
   Serial.println("success ---------------");
 
+  Particle* e = ELEMENT[0];
+  Serial.println(static_cast<int8_t>(e->default_direction));
 
   // grid.swap(5, 0, 5, 5);
   grid.print();
+}
+
+
+void setup() {
+  // put your setup code here, to run once:
+  Serial.begin(9600);
+  Cell test = createCellInstance(ELEMENT_ID::STONE);
+  grid.set(5, 5, test);  //This one is in the bottom corner
+  grid.print();
+  // grid.set(20, 14, test);  //This one is in the top right corner
+  // grid.set(32, 16, test); //This one is missing from the grid.print
+  // grid.set(0, 0, test); //This one is missing from the grid.print
+}
+
+void loop() {
+  // Serial.println("TEST");
+  grid.perform_pixel_behaviour();
+
+  Cell test = createCellInstance(ELEMENT_ID::STONE);
+  grid.set(5, 5, test);
+
+  grid.print();
+  // unit_test();
   // put your main code here, to run repeatedly:
 }
