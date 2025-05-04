@@ -2,6 +2,14 @@
 #include <memory>
 #include <random>
 #include <cstdint>
+#include <Adafruit_NeoPixel.h>
+#include <algorithm>
+
+constexpr byte PIN = 1;
+
+constexpr int16_t NUMPIXELS = 512;
+
+Adafruit_NeoPixel pixels(NUMPIXELS, PIN, NEO_GRB + NEO_KHZ800);
 
 class Cell;
 class Grid;
@@ -196,8 +204,11 @@ public:
     this->colour_data.set_base_colour();
   }
 
+  std::array<uint8_t, 3> get_output_colour_from_behaviour();
+
   void update_colour_from_state_change() {
     // TODO: Implement color update based on new element
+
   }
 
 
@@ -552,11 +563,14 @@ public:
       cell.element_id = updatable->next_phase[0];
       cell.direction = ELEMENT[static_cast<byte>(updatable->next_phase[0])]->default_direction;
       cell.update_colour_from_state_change();
+      cell.colour_data.set_base_colour();
       return;
     } else if (updatable->next_phase[1] != ELEMENT_ID::NO_ELEMENT && current_temp > updatable->phase_change_temp[1]) {
       cell.element_id = updatable->next_phase[1];
       cell.direction = ELEMENT[static_cast<byte>(updatable->next_phase[1])]->default_direction;      
       cell.update_colour_from_state_change();
+      cell.colour_data.set_base_colour();
+
       return;
     }
 
@@ -772,7 +786,7 @@ Solid* snow = new Solid(
 
 Solid* stone = new Solid(
   ELEMENT_ID::STONE,
-  ColourParameters({ 0, 0 }, { 0, 0 }, { 0, 0 }, COLOURMODE::BLACKBODY),
+  ColourParameters({ 0, 200 }, { 0, 200 }, { 0, 200 }, COLOURMODE::BLACKBODY),
   { 0, 1160 },                               // temperature range
   { ELEMENT_ID::NO_ELEMENT, ELEMENT_ID::LAVA },  // phase changes
   2.5f,                                     // thermal conductivity
@@ -813,7 +827,9 @@ Solid* metal = new Solid(
 // Liquids
 Liquid* water = new Liquid(
   ELEMENT_ID::WATER,
-  ColourParameters({ 0, 0 }, { 0, 0 }, { 254, 0 }, COLOURMODE::TEMPERATURE_DOWN),
+  ColourParameters({ 0, 0 }, { 0, 0 }, { 254, 0 }, COLOURMODE::SOLID),
+  // ColourParameters({ 0, 200 }, { 0, 200 }, { 0, 0 }, COLOURMODE::BLACKBODY),
+
   { 0, 100 },                               // temperature range
   { ELEMENT_ID::ICE, ELEMENT_ID::STEAM },  // phase changes
   0.6f,                                     // thermal conductivity
@@ -904,6 +920,52 @@ Particle* ELEMENT[ELEMENT_COUNT] = {
   // block
 };
 
+// std::array<uint8_t, 3> Cell::get_output_colour_from_behaviour() {
+//     COLOURMODE mode = colour_data.colour_mode;
+//     // std::array<uint8_t, 3> colour_return = {0, 0, 0};
+
+//     if (mode == COLOURMODE::SOLID || mode == COLOURMODE::STATIC) {
+//       return {colour_data.base_red, colour_data.base_green, colour_data.base_blue};
+//     } else if (mode == COLOURMODE::BLACKBODY) {
+//       float temperature = temperature;
+//       uint8_t blackbody_constant = 30;
+
+//       uint8_t r = colour_data.base_red;
+//       uint8_t g = colour_data.base_green;
+//       uint8_t b = colour_data.base_blue;
+
+//       uint8_t r_return = static_cast<uint8_t>((std::min(std::max(r + (2.0f * (temperature) / (blackbody_constant)), 0.0f), 254.0f)));
+//       uint8_t g_return = static_cast<uint8_t>((std::min(std::max(g + (0.5f * (temperature) / (blackbody_constant)), 0.0f), 254.0f)));
+//       uint8_t b_return = static_cast<uint8_t>((std::min(std::max(b + (1.0f * (temperature) / (blackbody_constant)), 0.0f), 254.0f)));
+
+//       // std::array<uint8_t, 3> colour_return = {r_return, g_return, b_return};
+//       return {r_return, g_return, b_return};
+//     // } else if (mode == COLOURMODE::TEMPERATURE_DOWN) {
+//     //   float temperature = temperature;
+//     //   float ratio;
+//     //   Updatable* element_data = ELEMENT[static_cast<uint8_t>(element_id)];
+//     }
+
+//       if (element_data->next_phase[0] != ELEMENT_ID::NO_ELEMENT and element_data->next_phase[1] != ELEMENT_ID::NO_ELEMENT) {
+//           ratio =  (temperature - element_data->phase_change_temp[0]) / (0.5 * element_data->phase_change_temp[1] - element_data->phase_change_temp[0]);
+//       } else if (element_data->next_phase[0] != ELEMENT_ID::NO_ELEMENT) {
+//           ratio = 1.5 - (element_data->phase_change_temp[0] / temperature);
+//       } else {
+//           ratio = std::max(0.5f, temperature / 200);
+//       }
+
+
+//       uint8_t r = colour_data.base_red;
+//       uint8_t g = colour_data.base_green;
+//       uint8_t b = colour_data.base_blue;
+
+//       uint8_t r_return = static_cast<uint8_t>((std::min(std::max((r * ratio), 0.0f), 254.0f)));
+//       uint8_t g_return = static_cast<uint8_t>((std::min(std::max((g * ratio), 0.0f), 254.0f)));
+//       uint8_t b_return = static_cast<uint8_t>((std::min(std::max((b * ratio), 0.0f), 254.0f)));
+
+//       return {r_return, g_return, b_return};
+//     }
+  // }
 
 bool Grid::can_swap(byte x1, byte y1, byte x2, byte y2) {
   Cell& cell_1 = get(x1, y1);
@@ -1103,7 +1165,41 @@ Cell createCellInstance(ELEMENT_ID id,
   return pixel;
 }
 
+
 Grid space;
+
+void display() {
+  int16_t num = 0;
+  for (byte y = 0; y < HEIGHT; y++) {
+    for (byte x = 0; x < WIDTH; x++) {
+      if (y >= 8) {
+        if (x % 2 != 0) {
+          num = 8 * x + y - 8;
+        } else {
+          num = 8 * x + ( 7- y) + 8;
+        }
+      } else {
+        if (x % 2 == 0) {
+          num = 256 + 8 * (31 - x) + (7 - (y % 8));
+        } else {
+          num = 256 + 8 * (31 - x) + (y % 8); 
+        }
+      }
+
+      Cell& cell = grid[x][y];
+      byte red = cell.colour_data.base_red;
+      byte green = cell.colour_data.base_green;
+      byte blue = cell.colour_data.base_blue;
+
+      pixels.setPixelColor(num, pixels.Color(red, green, blue));
+
+
+    }
+  }
+  pixels.show();   // Send the updated pixel colors to the hardware.
+
+  
+}
 
 void unit_test() {
   Serial.println("frame ---------------");
@@ -1159,13 +1255,14 @@ void unit_test() {
 
 void setup() {
   // put your setup code here, to run once:
-  Serial.begin(9600);
+  Serial.begin(460800);
   Cell test = createCellInstance(ELEMENT_ID::STONE, 10000.0);
   space.set(5, 5, test);  //This one is in the bottom corner
   space.print();
   // grid.set(20, 14, test);  //This one is in the top right corner
   // grid.set(32, 16, test); //This one is missing from the grid.print
   // grid.set(0, 0, test); //This one is missing from the grid.print
+  pixels.begin();
 }
 
 void loop() {
@@ -1175,7 +1272,7 @@ void loop() {
   space.set(2, 4, test);
 
   Cell rock = createCellInstance(ELEMENT_ID::LAVA, 10000.0);
-  space.set(30, 14, rock);
+  space.set(31, 14, rock);
 
   space.perform_pixel_behaviour();
 
@@ -1183,9 +1280,10 @@ void loop() {
   // grid.print();
   // unit_test();
   // put your main code here, to run repeatedly:
-  if (millis() > 10000) {
-    space.print();
+  // if (millis() > 10000) {
+  space.print();
     // space.print_t();
-
-  }
+  // pixels.clear();
+  display();
+  // }
 }
