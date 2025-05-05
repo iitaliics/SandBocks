@@ -21,13 +21,9 @@ extern Particle* ELEMENT[];
 
 /*
 TODO list:
- - Finish the project rofl
-
- - colour needs to be thought out, I need the colour_mode to be seperate so that it can be stacked for multiples in Cell class. The Colour
- class should only really store the colour params. New base values will need to be acquired, and then new display values will need to be acquired. 
- These cannot just be references, they need to be unique per instance.
-
-
+ - Update colourparams from phase change
+ - Particle states
+ - Special Elements
 */
 
 // Enum
@@ -95,7 +91,7 @@ enum class PARTICLETYPE {
   SOLID,
   LIQUID,
   GAS,
-
+  SPECIAL,
   // more types...
 };
 
@@ -208,7 +204,6 @@ public:
 
   void update_colour_from_state_change() {
     // TODO: Implement color update based on new element
-
   }
 
 
@@ -457,7 +452,8 @@ public:
       // char str[WIDTH * 2 + 1];
       for (byte j = 0; j < WIDTH; j++) {
         Cell& cell = get(j, HEIGHT - 1 - i);
-        Serial.print(cell.temperature); Serial.print(' ');
+        Serial.print(cell.temperature);
+        Serial.print(' ');
         // str[j * 2 + 1] = ' ';
       }
       // str[64] = '\0';
@@ -471,7 +467,8 @@ public:
       // char str[WIDTH * 2 + 1];
       for (byte j = 0; j < WIDTH; j++) {
         Cell& cell = get(j, HEIGHT - 1 - i);
-        Serial.print(cell.colour_data.base_red); Serial.print(' ');
+        Serial.print(cell.colour_data.base_red);
+        Serial.print(' ');
         // str[j * 2 + 1] = ' ';
       }
       // str[64] = '\0';
@@ -567,7 +564,7 @@ public:
       return;
     } else if (updatable->next_phase[1] != ELEMENT_ID::NO_ELEMENT && current_temp > updatable->phase_change_temp[1]) {
       cell.element_id = updatable->next_phase[1];
-      cell.direction = ELEMENT[static_cast<byte>(updatable->next_phase[1])]->default_direction;      
+      cell.direction = ELEMENT[static_cast<byte>(updatable->next_phase[1])]->default_direction;
       cell.update_colour_from_state_change();
       cell.colour_data.set_base_colour();
 
@@ -755,60 +752,185 @@ public:
   }
 };
 
+//Special classes
+class Destruct : public Particle {
+public:
 
+  Destruct(ELEMENT_ID element_id, ColourParameters colour_data, float density = 0)
+    : Particle(element_id, colour_data, default_direction, density) {}
+
+  virtual PARTICLETYPE getType() const override {
+    return PARTICLETYPE::SPECIAL;
+  }
+
+  virtual ~Destruct() {}  // Virtual destructor for polymorphism
+
+  void act(Grid& grid, byte x, byte y) override {
+    Cell& cell = grid.get(x, y);
+    auto surrounding_data = grid.check_surroundings(x, y);
+
+    std::array<uint8_t, 8> index_list = { INVALID_BYTE,
+                                          INVALID_BYTE,
+                                          INVALID_BYTE,
+                                          INVALID_BYTE,
+                                          INVALID_BYTE,
+                                          INVALID_BYTE,
+                                          INVALID_BYTE,
+                                          INVALID_BYTE };
+    uint8_t count = 0;
+    uint8_t idx = 0;
+    for (auto& data : surrounding_data) {
+      if (data.x != INVALID_BYTE) {
+        index_list[count++] = idx;
+      }
+      idx++;
+    }
+
+    if (count > 0) {
+      uint8_t random_index = RandomUtils::getRandomByte(0, count);
+
+      uint8_t n_x = surrounding_data[index_list[random_index]].x;
+      uint8_t n_y = surrounding_data[index_list[random_index]].y;
+
+      // Particle* element = ELEMENT[0]; // Access element from ELEMENT array
+      // Colour colour_copy(element->colour_data);
+      Cell n_pixel();
+      grid.set(n_x, n_y, n_pixel);
+    }
+  }
+}
+
+class Clone : public Particle {
+public:
+
+  Clone(ELEMENT_ID element_id, ColourParameters colour_data, float density = 0)
+    : Particle(element_id, colour_data, default_direction, density) {}
+
+  virtual PARTICLETYPE getType() const override {
+    return PARTICLETYPE::SPECIAL;
+  }
+
+  virtual ~Clone() {}  // Virtual destructor for polymorphism
+
+  void act(Grid& grid, byte x, byte y) override {
+    Cell& cell = grid.get(x, y);
+
+    if (cell.clone_element == ELEMENT_ID::NO_ELEMENT) {
+      // Get clone material
+      auto surrounding_data = grid.check_surroundings(x, y);
+
+      std::array<uint8_t, 8> index_list = { INVALID_BYTE,
+                                            INVALID_BYTE,
+                                            INVALID_BYTE,
+                                            INVALID_BYTE,
+                                            INVALID_BYTE,
+                                            INVALID_BYTE,
+                                            INVALID_BYTE,
+                                            INVALID_BYTE };
+      uint8_t count = 0;
+      uint8_t idx = 0;
+      for (auto& data : surrounding_data) {
+        if (data.x != INVALID_BYTE && data.cell.element_id != ELEMENT_ID::AIR) {
+          index_list[count++] = idx;
+        }
+        idx++;
+      }
+
+      if (count > 0) {
+        uint8_t random_index = RandomUtils::getRandomByte(0, count);
+
+        ELEMENT_ID clone_element_id = surrounding_data[index_list[random_index]].element_id;
+      }
+    } else {
+      // Spawn Clone Material
+    }
+    auto surrounding_data = grid.check_surroundings(x, y);
+
+    std::array<uint8_t, 8> index_list = { INVALID_BYTE,
+                                          INVALID_BYTE,
+                                          INVALID_BYTE,
+                                          INVALID_BYTE,
+                                          INVALID_BYTE,
+                                          INVALID_BYTE,
+                                          INVALID_BYTE,
+                                          INVALID_BYTE };
+    uint8_t count = 0;
+    uint8_t idx = 0;
+    for (auto& data : surrounding_data) {
+      if (data.cell.element_id == ELEMENT_ID::AIR) {
+        index_list[count++] = idx;
+      }
+      idx++;
+    }
+
+    if (count > 0) {
+      uint8_t random_index = RandomUtils::getRandomByte(0, count);
+
+      uint8_t n_x = surrounding_data[index_list[random_index]].x;
+      uint8_t n_y = surrounding_data[index_list[random_index]].y;
+
+      // Particle* element = ELEMENT[0]; // Access element from ELEMENT array
+      // Colour colour_copy(element->colour_data);
+      Cell n_pixel(
+
+      );
+      grid.set(n_x, n_y, n_pixel);
+    }
+  }
+}
 // Solids
 Solid* sand = new Solid(
   ELEMENT_ID::SAND,
   ColourParameters({ 200, 250 }, { 125, 200 }, { 75, 100 }, COLOURMODE::BLACKBODY),
-  { 0, 0 },                               // temperature range
+  { 0, 0 },                                            // temperature range
   { ELEMENT_ID::NO_ELEMENT, ELEMENT_ID::NO_ELEMENT },  // phase changes
-  0.4f,                                     // thermal conductivity
-  1602.0f,                                  // density
+  0.4f,                                                // thermal conductivity
+  1602.0f,                                             // density
   DIRECTION::DOWN);
 
 Solid* ice = new Solid(
   ELEMENT_ID::ICE,
   ColourParameters({ 55, 85 }, { 55, 85 }, { 255, 0 }, COLOURMODE::SOLID),
-  { 0, 0 },                               // temperature range
+  { 0, 0 },                                       // temperature range
   { ELEMENT_ID::NO_ELEMENT, ELEMENT_ID::WATER },  // phase changes
-  2.22f,                                     // thermal conductivity
-  0.0f,                                  // density
+  2.22f,                                          // thermal conductivity
+  0.0f,                                           // density
   DIRECTION::NONE);
 
 Solid* snow = new Solid(
   ELEMENT_ID::SNOW,
   ColourParameters({ 240, 254 }, { 240, 254 }, { 240, 254 }, COLOURMODE::SOLID),
-  { 0, 0 },                               // temperature range
+  { 0, 0 },                                       // temperature range
   { ELEMENT_ID::NO_ELEMENT, ELEMENT_ID::WATER },  // phase changes
-  0.4f,                                     // thermal conductivity
-  1602.0f,                                  // density
+  0.4f,                                           // thermal conductivity
+  1602.0f,                                        // density
   DIRECTION::DOWN);
 
 Solid* stone = new Solid(
   ELEMENT_ID::STONE,
   ColourParameters({ 0, 200 }, { 0, 200 }, { 0, 200 }, COLOURMODE::BLACKBODY),
-  { 0, 1160 },                               // temperature range
+  { 0, 1160 },                                   // temperature range
   { ELEMENT_ID::NO_ELEMENT, ELEMENT_ID::LAVA },  // phase changes
-  2.5f,                                     // thermal conductivity
-  2500.0f,                                  // density
+  2.5f,                                          // thermal conductivity
+  2500.0f,                                       // density
   DIRECTION::DOWN);
 
 Solid* wood = new Solid(
   ELEMENT_ID::WOOD,
   ColourParameters({ 50, 100 }, { 25, 55 }, { 0, 0 }, COLOURMODE::SOLID),
-  { 0, 250 },                               // temperature range
+  { 0, 250 },                                          // temperature range
   { ELEMENT_ID::NO_ELEMENT, ELEMENT_ID::NO_ELEMENT },  // phase changes
-  0.15f,                                     // thermal conductivity
-  0.0f,                                  // density
+  0.15f,                                               // thermal conductivity
+  0.0f,                                                // density
   DIRECTION::NONE);
 
 Solid* metal = new Solid(
   ELEMENT_ID::METAL,
   ColourParameters({ 57, 0 }, { 75, 0 }, { 80, 0 }, COLOURMODE::BLACKBODY),
-  { 0, 250 },                               // temperature range
+  { 0, 250 },                                          // temperature range
   { ELEMENT_ID::NO_ELEMENT, ELEMENT_ID::NO_ELEMENT },  // phase changes
-  2.5f,                                     // thermal conductivity
-  0.0f,                                  // density
+  2.5f,                                                // thermal conductivity
+  0.0f,                                                // density
   DIRECTION::NONE);
 
 // TODO
@@ -830,37 +952,37 @@ Liquid* water = new Liquid(
   ColourParameters({ 0, 0 }, { 0, 0 }, { 254, 0 }, COLOURMODE::SOLID),
   // ColourParameters({ 0, 200 }, { 0, 200 }, { 0, 0 }, COLOURMODE::BLACKBODY),
 
-  { 0, 100 },                               // temperature range
+  { 0, 100 },                              // temperature range
   { ELEMENT_ID::ICE, ELEMENT_ID::STEAM },  // phase changes
-  0.6f,                                     // thermal conductivity
+  0.6f,                                    // thermal conductivity
   997.0f,                                  // density
   DIRECTION::DOWN);
 
 Liquid* oil = new Liquid(
   ELEMENT_ID::OIL,
   ColourParameters({ 50, 0 }, { 25, 0 }, { 25, 0 }, COLOURMODE::SOLID),
-  { 0, 300 },                               // temperature range
+  { 0, 300 },                                          // temperature range
   { ELEMENT_ID::NO_ELEMENT, ELEMENT_ID::NO_ELEMENT },  // phase changes
-  0.6f,                                     // thermal conductivity
-  800.0f,                                  // density
+  0.6f,                                                // thermal conductivity
+  800.0f,                                              // density
   DIRECTION::DOWN);
 
 Liquid* lava = new Liquid(
   ELEMENT_ID::LAVA,
   ColourParameters({ 254, 0 }, { 150, 250 }, { 150, 250 }, COLOURMODE::NOISE),
-  { 1160, 0 },                               // temperature range
+  { 1160, 0 },                                    // temperature range
   { ELEMENT_ID::STONE, ELEMENT_ID::NO_ELEMENT },  // phase changes
-  2.0f,                                     // thermal conductivity
-  2500.0f,                                  // density
+  2.0f,                                           // thermal conductivity
+  2500.0f,                                        // density
   DIRECTION::DOWN);
 
 Liquid* molten_metal = new Liquid(
   ELEMENT_ID::MOLTEN_METAL,
   ColourParameters({ 125, 0 }, { 75, 0 }, { 85, 0 }, COLOURMODE::BLACKBODY),
-  { 1538, 0 },                               // temperature range
+  { 1538, 0 },                                    // temperature range
   { ELEMENT_ID::METAL, ELEMENT_ID::NO_ELEMENT },  // phase changes
-  2.5f,                                     // thermal conductivity
-  7800.0f,                                  // density
+  2.5f,                                           // thermal conductivity
+  7800.0f,                                        // density
   DIRECTION::DOWN);
 
 
@@ -877,31 +999,36 @@ Gas* air = new Gas(
 Gas* steam = new Gas(
   ELEMENT_ID::STEAM,
   ColourParameters({ 200, 0 }, { 200, 0 }, { 200, 0 }, COLOURMODE::TEMPERATURE_DOWN),
-  { 100, 0 },                                            // temperature range
+  { 100, 0 },                                     // temperature range
   { ELEMENT_ID::WATER, ELEMENT_ID::NO_ELEMENT },  // phase changes
-  0.0184f,                                              // thermal conductivity
-  0.6,                                               // density
+  0.0184f,                                        // thermal conductivity
+  0.6,                                            // density
   DIRECTION::UP);
 
 Gas* smoke = new Gas(
   ELEMENT_ID::SMOKE,
   ColourParameters({ 254, 0 }, { 254, 0 }, { 254, 0 }, COLOURMODE::SOLID),
-  { 0, 300 },                                            // temperature range
+  { 0, 300 },                                    // temperature range
   { ELEMENT_ID::NO_ELEMENT, ELEMENT_ID::FIRE },  // phase changes
-  0.6,                                              // thermal conductivity
-  0.6,                                               // density
+  0.6,                                           // thermal conductivity
+  0.6,                                           // density
   DIRECTION::UP);
 
 Gas* fire = new Gas(
   ELEMENT_ID::FIRE,
   ColourParameters({ 200, 254 }, { 0, 50 }, { 0, 50 }, COLOURMODE::STATIC),
-  { 300, 0 },                                            // temperature range
+  { 300, 0 },                                     // temperature range
   { ELEMENT_ID::SMOKE, ELEMENT_ID::NO_ELEMENT },  // phase changes
-  0.6,                                              // thermal conductivity
-  0.6,                                               // density
+  0.6,                                            // thermal conductivity
+  0.6,                                            // density
   DIRECTION::UP);
 
+// Destruct* destruct = new Destruct
 
+// Clone* clone = new Clone
+
+
+// List of Elements
 Particle* ELEMENT[ELEMENT_COUNT] = {
   air,
   sand,
@@ -918,6 +1045,7 @@ Particle* ELEMENT[ELEMENT_COUNT] = {
   molten_metal,
   metal,
   // block
+  destruct,
 };
 
 // std::array<uint8_t, 3> Cell::get_output_colour_from_behaviour() {
@@ -965,7 +1093,7 @@ Particle* ELEMENT[ELEMENT_COUNT] = {
 
 //       return {r_return, g_return, b_return};
 //     }
-  // }
+// }
 
 bool Grid::can_swap(byte x1, byte y1, byte x2, byte y2) {
   Cell& cell_1 = get(x1, y1);
@@ -984,7 +1112,7 @@ bool Grid::can_swap(byte x1, byte y1, byte x2, byte y2) {
     return false;
   }
 
-// Debugging
+  // Debugging
   // if (element_1->element_id == ELEMENT_ID::STEAM && y2 - y1 == 1 && x2 == x1) {
   //   Serial.print("STEAM CAN SWAP: ");
   //   Serial.print(" x1: ");
@@ -1033,8 +1161,8 @@ bool Grid::can_swap(byte x1, byte y1, byte x2, byte y2) {
 }
 
 bool Grid::can_swap_after_random(byte x1, byte y1, byte x2, byte y2) {
-    // """ Assumes the check has already been made to see if these can swap """
-    //TODO
+  // """ Assumes the check has already been made to see if these can swap """
+  //TODO
   Cell& cell_1 = get(x1, y1);
   Cell& cell_2 = get(x2, y2);
 
@@ -1135,7 +1263,7 @@ Cell createCellInstance(ELEMENT_ID id,
                         byte life = 0,
                         byte branches = 0) {
 
-  Particle* element = ELEMENT[static_cast<byte>(id)]; // Access element from ELEMENT array
+  Particle* element = ELEMENT[static_cast<byte>(id)];  // Access element from ELEMENT array
   Colour colour_copy(element->colour_data);
 
   // pixel attribute ordering
@@ -1176,13 +1304,13 @@ void display() {
         if (x % 2 != 0) {
           num = 8 * x + y - 8;
         } else {
-          num = 8 * x + ( 7- y) + 8;
+          num = 8 * x + (7 - y) + 8;
         }
       } else {
         if (x % 2 == 0) {
           num = 256 + 8 * (31 - x) + (7 - (y % 8));
         } else {
-          num = 256 + 8 * (31 - x) + (y % 8); 
+          num = 256 + 8 * (31 - x) + (y % 8);
         }
       }
 
@@ -1192,13 +1320,9 @@ void display() {
       byte blue = cell.colour_data.base_blue;
 
       pixels.setPixelColor(num, pixels.Color(red, green, blue));
-
-
     }
   }
-  pixels.show();   // Send the updated pixel colors to the hardware.
-
-  
+  pixels.show();  // Send the updated pixel colors to the hardware.
 }
 
 void unit_test() {
@@ -1258,6 +1382,10 @@ void setup() {
   Serial.begin(460800);
   Cell test = createCellInstance(ELEMENT_ID::STONE, 10000.0);
   space.set(5, 5, test);  //This one is in the bottom corner
+
+  Cell destrtuct = createCellInstance(ELEMENT_ID::DESTRUCT);
+  space.set(31, 0, destrtuct);
+
   space.print();
   // grid.set(20, 14, test);  //This one is in the top right corner
   // grid.set(32, 16, test); //This one is missing from the grid.print
@@ -1282,7 +1410,7 @@ void loop() {
   // put your main code here, to run repeatedly:
   // if (millis() > 10000) {
   space.print();
-    // space.print_t();
+  // space.print_t();
   // pixels.clear();
   display();
   // }
