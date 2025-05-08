@@ -879,52 +879,96 @@ public:
 };
 
 // TODO
-// class Grow : public Particle { 
-// public:
-
-//   Grow(ELEMENT_ID element_id = ELEMENT_ID::GROW, ColourParameters colour_data = ColourParameters({ 0, 0 }, { 0, 0 }, { 0, 0 }, COLOURMODE::SOLID), float density = 0.0)
-//     : Particle(element_id, colour_data, default_direction, density) {}
-
-//   virtual PARTICLETYPE getType() const override {
-//     return PARTICLETYPE::SPECIAL;
-//   }
-
-//   virtual ~Grow() {}  // Virtual destructor for polymorphism
-
-//   void act(Grid& grid, uint8_t x, uint8_t y) override {
-//     Cell& cell = grid.get(x, y);
-//     auto surrounding_data = grid.check_surroundings(x, y);
-
-//     std::array<uint8_t, 8> index_list = { INVALID_BYTE,
-//                                           INVALID_BYTE,
-//                                           INVALID_BYTE,
-//                                           INVALID_BYTE,
-//                                           INVALID_BYTE,
-//                                           INVALID_BYTE,
-//                                           INVALID_BYTE,
-//                                           INVALID_BYTE };
-//     uint8_t count = 0;
-//     uint8_t idx = 0;
-//     for (auto& data : surrounding_data) {
-//       if (data.x != INVALID_BYTE) {
-//         index_list[count++] = idx;
+// class Grow : public Particle {
+//   public:
+  
+//     Grow(ELEMENT_ID element_id = ELEMENT_ID::GROW, ColourParameters colour_data = ColourParameters({ 0, 0 }, { 0, 0 }, { 0, 0 }, COLOURMODE::SOLID), float density = 0.0)
+//       : Particle(element_id, colour_data, default_direction, density) {}
+  
+//     virtual PARTICLETYPE getType() const override {
+//       return PARTICLETYPE::SPECIAL;
+//     }
+  
+//     virtual ~Grow() {}  // Virtual destructor for polymorphism
+  
+//     void act(Grid& grid, uint8_t x, uint8_t y) override {
+//       Cell& cell = grid.get(x, y);
+//       auto surrounding_data = grid.check_surroundings(x, y);
+  
+//       std::array<uint8_t, 8> index_list = { INVALID_BYTE,
+//                                             INVALID_BYTE,
+//                                             INVALID_BYTE,
+//                                             INVALID_BYTE,
+//                                             INVALID_BYTE,
+//                                             INVALID_BYTE,
+//                                             INVALID_BYTE,
+//                                             INVALID_BYTE };
+//       uint8_t count = 0;
+//       uint8_t idx = 0;
+//       for (auto& data : surrounding_data) {
+//         if (data.x != INVALID_BYTE || data.cell->element_id == ELEMENT_ID::AIR || ata.cell->element_id == ELEMENT_ID::WATER) {
+//           index_list[count++] = idx;
+//         }
+//         idx++;
 //       }
-//       idx++;
+      
+//       if (count > 0) {
+//         if (count > 1) {
+//            if (RandomUtils::getRandomBool(0.05) && cell->branches > 0 && cell->life > 0) {
+//             uint8_t random_index_1 = RandomUtils::getRandomByte(0, count);
+//             uint8_t random_index_2 = RandomUtils::getRandomByte(0, count); 
+  
+//             if (random_index_1 == random_index_2) {
+//               return;
+//             }
+  
+//             // branch
+//             uint8_t n_x = surrounding_data[index_list[random_index]].x;
+//             uint8_t n_y = surrounding_data[index_list[random_index]].y;
+  
+//             // Particle* element = ELEMENT[0]; // Access element from ELEMENT array
+//             // Colour colour_copy(element->colour_data);
+//             Cell growth(
+//                     ELEMENT_ID::GROW,
+//                     ColourParameters({ 0, 0 }, { 150, 250 }, { 10, 0 }, COLOURMODE::STATIC),
+//                     DIRECTION::NONE,
+//                     true,
+//                     23,
+//                     100,  // fuel,
+//                     cell->life  // life,
+//                     cell->branches  // branches,
+//                     STATE_ID::NO_STATE,
+//                     ELEMENT_ID::NO_ELEMENT);
+//             grid.set(n_x, n_y, growth);
+  
+//             //
+//           }
+//         } else {
+//           if (RandomUtils::getRandomBool(0.1) && cell->life > 0) {
+//             uint8_t random_index = RandomUtils::getRandomByte(0, count);
+  
+//             uint8_t n_x = surrounding_data[index_list[random_index]].x;
+//             uint8_t n_y = surrounding_data[index_list[random_index]].y;
+  
+//             // Particle* element = ELEMENT[0]; // Access element from ELEMENT array
+//             // Colour colour_copy(element->colour_data);
+//             Cell growth(
+//                     ELEMENT_ID::GROW,
+//                     ColourParameters({ 0, 0 }, { 150, 250 }, { 10, 0 }, COLOURMODE::STATIC),
+//                     DIRECTION::NONE,
+//                     true,
+//                     23,
+//                     100,  // fuel,
+//                     cell->life  // life,
+//                     cell->branches  // branches,
+//                     STATE_ID::NO_STATE,
+//                     ELEMENT_ID::NO_ELEMENT);
+//             grid.set(n_x, n_y, growth);
+//           }
+//         }
+//       }
 //     }
-
-//     if (count > 0) {
-//       uint8_t random_index = RandomUtils::getRandomByte(0, count);
-
-//       uint8_t n_x = surrounding_data[index_list[random_index]].x;
-//       uint8_t n_y = surrounding_data[index_list[random_index]].y;
-
-//       // Particle* element = ELEMENT[0]; // Access element from ELEMENT array
-//       // Colour colour_copy(element->colour_data);
-//       Cell n_pixel;
-//       grid.set(n_x, n_y, n_pixel);
-//     }
-//   }
-// };
+//   };
 
 // Solids
 Solid* sand = new Solid(
