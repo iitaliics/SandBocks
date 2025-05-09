@@ -46,8 +46,8 @@ enum class ELEMENT_ID {
 
   // Special TODO
   DESTRUCT,
-  GROW,
   CLONE,
+  GROW,
   COLD,
   HOT,
   CONDUCT,
@@ -202,9 +202,10 @@ public:
 
   std::array<uint8_t, 3> get_output_colour_from_behaviour();
 
-  void update_colour_from_state_change() {
+  void update_colour_from_phase_change() {
     // TODO: Implement color update based on new element
   }
+
 
 
   // void update_colour() {
@@ -462,6 +463,21 @@ public:
     Serial.println("_______________________________________________");
   }
 
+  void print_s() {
+    for (uint8_t i = 0; i < HEIGHT; i++) {
+      // char str[WIDTH * 2 + 1];
+      for (uint8_t j = 0; j < WIDTH; j++) {
+        Cell& cell = get(j, HEIGHT - 1 - i);
+        Serial.print(static_cast<uint8_t>(cell.state_id));
+        Serial.print(' ');
+        // str[j * 2 + 1] = ' ';
+      }
+      // str[64] = '\0';
+      Serial.println(' ');
+    }
+    Serial.println("_______________________________________________");
+  }
+
   void print_c() {
     for (uint8_t i = 0; i < HEIGHT; i++) {
       // char str[WIDTH * 2 + 1];
@@ -559,13 +575,13 @@ public:
     if (updatable->next_phase[0] != ELEMENT_ID::NO_ELEMENT && current_temp < updatable->phase_change_temp[0]) {
       cell.element_id = updatable->next_phase[0];
       cell.direction = ELEMENT[static_cast<uint8_t>(updatable->next_phase[0])]->default_direction;
-      cell.update_colour_from_state_change();
+      cell.update_colour_from_phase_change();
       cell.colour_data.set_base_colour();
       return;
     } else if (updatable->next_phase[1] != ELEMENT_ID::NO_ELEMENT && current_temp > updatable->phase_change_temp[1]) {
       cell.element_id = updatable->next_phase[1];
       cell.direction = ELEMENT[static_cast<uint8_t>(updatable->next_phase[1])]->default_direction;
-      cell.update_colour_from_state_change();
+      cell.update_colour_from_phase_change();
       cell.colour_data.set_base_colour();
 
       return;
@@ -574,6 +590,10 @@ public:
     if (updatable->next_phase[1] == ELEMENT_ID::NO_ELEMENT && cell.flammable && current_temp > updatable->phase_change_temp[1]) {
       cell.state_id = STATE_ID::BURNING;
     }
+
+    // if (cell->state_id != STATE_ID::NO_STATE) {
+    //   STATE[static_cast<uint8_t>(cell->state_id)].act();
+    // }
   }
 };
 
@@ -756,7 +776,7 @@ public:
 class Destruct : public Particle {
 public:
 
-  Destruct(ELEMENT_ID element_id = ELEMENT_ID::DESTRUCT, ColourParameters colour_data = ColourParameters({ 0, 0 }, { 0, 0 }, { 0, 0 }, COLOURMODE::SOLID), float density = 0.0)
+  Destruct(ELEMENT_ID element_id = ELEMENT_ID::DESTRUCT, ColourParameters colour_data = ColourParameters({ 25, 55 }, { 25, 55 }, { 25, 55 }, COLOURMODE::NOISE), float density = 0.0)
     : Particle(element_id, colour_data, default_direction, density) {}
 
   virtual PARTICLETYPE getType() const override {
@@ -780,7 +800,7 @@ public:
     uint8_t count = 0;
     uint8_t idx = 0;
     for (auto& data : surrounding_data) {
-      if (data.x != INVALID_BYTE) {
+      if (data.x != INVALID_BYTE && data.cell->element_id != ELEMENT_ID::DESTRUCT) {
         index_list[count++] = idx;
       }
       idx++;
@@ -803,7 +823,7 @@ public:
 class Clone : public Particle {
 public:
 
-  Clone(ELEMENT_ID element_id, ColourParameters colour_data, float density = 0)
+  Clone(ELEMENT_ID element_id = ELEMENT_ID::CLONE, ColourParameters colour_data = ColourParameters({ 150, 0 }, { 150, 0 }, { 0, 0 }, COLOURMODE::SOLID), float density = 0.0)
     : Particle(element_id, colour_data, default_direction, density) {}
 
   virtual PARTICLETYPE getType() const override {
@@ -812,163 +832,126 @@ public:
 
   virtual ~Clone() {}  // Virtual destructor for polymorphism
 
+  void act(Grid& grid, uint8_t x, uint8_t y) override;
+};
+
+class Grow : public Updatable {
+public:
+  Grow(ELEMENT_ID element_id = ELEMENT_ID::GROW, ColourParameters colour_data = ColourParameters({ 0, 0 }, { 150, 250 }, { 10, 0 }, COLOURMODE::STATIC),
+       std::array<float, 2> phase_change_temp = { 0, 300 }, std::array<ELEMENT_ID, 2> next_phase = { ELEMENT_ID::NO_ELEMENT, ELEMENT_ID::NO_ELEMENT },
+       float thermal_conductivity = 0.6, float density = 0.0, DIRECTION default_direction = DIRECTION::DOWN)
+    : Updatable(element_id, colour_data, phase_change_temp, next_phase, thermal_conductivity, default_direction, density) {}
+
+  virtual PARTICLETYPE getType() const override {
+    return PARTICLETYPE::SPECIAL;
+  }
+
+  virtual ~Grow() {}  // Virtual destructor for polymorphism
+
   void act(Grid& grid, uint8_t x, uint8_t y) override {
     Cell& cell = grid.get(x, y);
+    auto surrounding_data = grid.check_surroundings(x, y);
+    std::array<uint8_t, 8> index_list = { INVALID_BYTE,
+                                          INVALID_BYTE,
+                                          INVALID_BYTE,
+                                          INVALID_BYTE,
+                                          INVALID_BYTE,
+                                          INVALID_BYTE,
+                                          INVALID_BYTE,
+                                          INVALID_BYTE };
+    uint8_t count = 0;
+    uint8_t idx = 0;
 
-    if (cell.clone_element == ELEMENT_ID::NO_ELEMENT || cell.clone_element == ELEMENT_ID::CLONE) {
-      // Get clone material
-      auto surrounding_data = grid.check_surroundings(x, y);
+    uint8_t random_index;
 
-      std::array<uint8_t, 8> index_list = { INVALID_BYTE,
-                                            INVALID_BYTE,
-                                            INVALID_BYTE,
-                                            INVALID_BYTE,
-                                            INVALID_BYTE,
-                                            INVALID_BYTE,
-                                            INVALID_BYTE,
-                                            INVALID_BYTE };
-      uint8_t count = 0;
-      uint8_t idx = 0;
-      for (auto& data : surrounding_data) {
-        if (data.x != INVALID_BYTE && data.cell->element_id != ELEMENT_ID::AIR) {
-          index_list[count++] = idx;
+    uint8_t n_x;
+    uint8_t n_y;
+
+    for (auto& data : surrounding_data) {
+      if (data.x != INVALID_BYTE && (data.cell->element_id == ELEMENT_ID::AIR || data.cell->element_id == ELEMENT_ID::WATER || data.cell->element_id == ELEMENT_ID::STEAM)) {
+        index_list[count++] = idx;
+      }
+      idx++;
+    }
+
+    if (count > 0) {
+      if (count > 1) {
+        if (RandomUtils::getRandomBool(0.05) && cell.branches > 0 && cell.life > 0) {
+          random_index = RandomUtils::getRandomByte(0, count);
+          uint8_t random_index_2 = RandomUtils::getRandomByte(0, count);
+
+          if (random_index == random_index_2) {
+            return;
+          }
+
+          // branch 1
+          uint8_t n_x = surrounding_data[index_list[random_index]].x;
+          uint8_t n_y = surrounding_data[index_list[random_index]].y;
+
+          // Particle* element = ELEMENT[0]; // Access element from ELEMENT array
+          // Colour colour_copy(element->colour_data);
+          Cell growth_1(
+            ELEMENT_ID::GROW,
+            ColourParameters({ 0, 0 }, { 150, 250 }, { 10, 0 }, COLOURMODE::STATIC),
+            DIRECTION::NONE,
+            true,
+            23,
+            100,                // fuel,
+            cell.life - 10,     // life,
+            cell.branches - 1,  // branches,
+            STATE_ID::NO_STATE);
+          grid.set(n_x, n_y, growth_1);
+
+          // branch 2
+          n_x = surrounding_data[index_list[random_index_2]].x;
+          n_y = surrounding_data[index_list[random_index_2]].y;
+
+          // Particle* element = ELEMENT[0]; // Access element from ELEMENT array
+          // Colour colour_copy(element->colour_data);
+          Cell growth_2(
+            ELEMENT_ID::GROW,
+            ColourParameters({ 0, 0 }, { 150, 250 }, { 10, 0 }, COLOURMODE::STATIC),
+            DIRECTION::NONE,
+            true,
+            23,
+            100,                // fuel,
+            cell.life - 10,     // life,
+            cell.branches - 1,  // branches,
+            STATE_ID::NO_STATE);
+          grid.set(n_x, n_y, growth_2);
+
+          cell.life = 0;
+          cell.branches = 0;
+          //
         }
-        idx++;
-      }
+      } else {
+        if (RandomUtils::getRandomBool(0.1) && cell.life > 0) {
 
-      if (count > 0) {
-        uint8_t random_index = RandomUtils::getRandomByte(0, count);
+          random_index = RandomUtils::getRandomByte(0, count);
 
-        ELEMENT_ID clone_element_id = surrounding_data[index_list[random_index]].cell->element_id;
+          n_x = surrounding_data[index_list[random_index]].x;
+          n_y = surrounding_data[index_list[random_index]].y;
 
-      }
-    } else {
-      // Spawn Clone Material
-      auto surrounding_data = grid.check_surroundings(x, y);
-
-      std::array<uint8_t, 8> index_list = { INVALID_BYTE,
-                                            INVALID_BYTE,
-                                            INVALID_BYTE,
-                                            INVALID_BYTE,
-                                            INVALID_BYTE,
-                                            INVALID_BYTE,
-                                            INVALID_BYTE,
-                                            INVALID_BYTE };
-      uint8_t count = 0;
-      uint8_t idx = 0;
-      for (auto& data : surrounding_data) {
-        if (data.cell->element_id == ELEMENT_ID::AIR) {
-          index_list[count++] = idx;
+          // // Particle* element = ELEMENT[0]; // Access element from ELEMENT array
+          // // Colour colour_copy(element->colour_data);
+          Cell growth(
+            ELEMENT_ID::GROW,
+            ColourParameters({ 0, 0 }, { 150, 250 }, { 10, 0 }, COLOURMODE::STATIC),
+            DIRECTION::NONE,
+            true,
+            23,
+            100,             // fuel,
+            cell.life - 10,  // life,
+            cell.branches,   // branches,
+            STATE_ID::NO_STATE);
+          grid.set(n_x, n_y, growth);
+          cell.life = 0;
+          cell.branches = 0;
         }
-        idx++;
-      }
-
-      if (count > 0) {
-        uint8_t random_index = RandomUtils::getRandomByte(0, count);
-
-        uint8_t n_x = surrounding_data[index_list[random_index]].x;
-        uint8_t n_y = surrounding_data[index_list[random_index]].y;
-
-        // Particle* element = ELEMENT[0]; // Access element from ELEMENT array
-        // Colour colour_copy(element->colour_data);
-        Cell n_pixel;
-        grid.set(n_x, n_y, n_pixel);
       }
     }
   }
 };
-
-// TODO
-// class Grow : public Particle {
-//   public:
-  
-//     Grow(ELEMENT_ID element_id = ELEMENT_ID::GROW, ColourParameters colour_data = ColourParameters({ 0, 0 }, { 0, 0 }, { 0, 0 }, COLOURMODE::SOLID), float density = 0.0)
-//       : Particle(element_id, colour_data, default_direction, density) {}
-  
-//     virtual PARTICLETYPE getType() const override {
-//       return PARTICLETYPE::SPECIAL;
-//     }
-  
-//     virtual ~Grow() {}  // Virtual destructor for polymorphism
-  
-//     void act(Grid& grid, uint8_t x, uint8_t y) override {
-//       Cell& cell = grid.get(x, y);
-//       auto surrounding_data = grid.check_surroundings(x, y);
-  
-//       std::array<uint8_t, 8> index_list = { INVALID_BYTE,
-//                                             INVALID_BYTE,
-//                                             INVALID_BYTE,
-//                                             INVALID_BYTE,
-//                                             INVALID_BYTE,
-//                                             INVALID_BYTE,
-//                                             INVALID_BYTE,
-//                                             INVALID_BYTE };
-//       uint8_t count = 0;
-//       uint8_t idx = 0;
-//       for (auto& data : surrounding_data) {
-//         if (data.x != INVALID_BYTE || data.cell->element_id == ELEMENT_ID::AIR || ata.cell->element_id == ELEMENT_ID::WATER) {
-//           index_list[count++] = idx;
-//         }
-//         idx++;
-//       }
-      
-//       if (count > 0) {
-//         if (count > 1) {
-//            if (RandomUtils::getRandomBool(0.05) && cell->branches > 0 && cell->life > 0) {
-//             uint8_t random_index_1 = RandomUtils::getRandomByte(0, count);
-//             uint8_t random_index_2 = RandomUtils::getRandomByte(0, count); 
-  
-//             if (random_index_1 == random_index_2) {
-//               return;
-//             }
-  
-//             // branch
-//             uint8_t n_x = surrounding_data[index_list[random_index]].x;
-//             uint8_t n_y = surrounding_data[index_list[random_index]].y;
-  
-//             // Particle* element = ELEMENT[0]; // Access element from ELEMENT array
-//             // Colour colour_copy(element->colour_data);
-//             Cell growth(
-//                     ELEMENT_ID::GROW,
-//                     ColourParameters({ 0, 0 }, { 150, 250 }, { 10, 0 }, COLOURMODE::STATIC),
-//                     DIRECTION::NONE,
-//                     true,
-//                     23,
-//                     100,  // fuel,
-//                     cell->life  // life,
-//                     cell->branches  // branches,
-//                     STATE_ID::NO_STATE,
-//                     ELEMENT_ID::NO_ELEMENT);
-//             grid.set(n_x, n_y, growth);
-  
-//             //
-//           }
-//         } else {
-//           if (RandomUtils::getRandomBool(0.1) && cell->life > 0) {
-//             uint8_t random_index = RandomUtils::getRandomByte(0, count);
-  
-//             uint8_t n_x = surrounding_data[index_list[random_index]].x;
-//             uint8_t n_y = surrounding_data[index_list[random_index]].y;
-  
-//             // Particle* element = ELEMENT[0]; // Access element from ELEMENT array
-//             // Colour colour_copy(element->colour_data);
-//             Cell growth(
-//                     ELEMENT_ID::GROW,
-//                     ColourParameters({ 0, 0 }, { 150, 250 }, { 10, 0 }, COLOURMODE::STATIC),
-//                     DIRECTION::NONE,
-//                     true,
-//                     23,
-//                     100,  // fuel,
-//                     cell->life  // life,
-//                     cell->branches  // branches,
-//                     STATE_ID::NO_STATE,
-//                     ELEMENT_ID::NO_ELEMENT);
-//             grid.set(n_x, n_y, growth);
-//           }
-//         }
-//       }
-//     }
-//   };
 
 // Solids
 Solid* sand = new Solid(
@@ -1026,13 +1009,9 @@ Solid* metal = new Solid(
   DIRECTION::NONE);
 
 // TODO
-// Updatable* block = new Updatable(
-//   ELEMENT_ID::BLOCK,
-//   ColourParameters({ 100, 0 }, { 100, 0 }, { 100, 0 }, COLOURMODE::SOLID),
-//   { 0, 0 },                               // temperature range
-//   { ELEMENT_ID::NO_ELEMENT, ELEMENT_ID::NO_ELEMENT },  // phase changes
-//   0.0f,                                     // thermal conductivity                                 // density
-//   );
+Particle* block = new Particle(
+  ELEMENT_ID::BLOCK,
+  ColourParameters({ 100, 0 }, { 100, 0 }, { 100, 0 }, COLOURMODE::SOLID));
 
 // Liquids
 Liquid* water = new Liquid(
@@ -1113,7 +1092,9 @@ Gas* fire = new Gas(
 
 Destruct* destruct = new Destruct();
 
-// Clone* clone = new Clone
+Clone* clone = new Clone();
+
+Grow* grow = new Grow();
 
 
 // List of Elements
@@ -1132,55 +1113,101 @@ Particle* ELEMENT[ELEMENT_COUNT] = {
   wood,
   molten_metal,
   metal,
-  // block
+  block,
   destruct,
+  clone,
+  grow,
+};
+
+//States data
+class State {
+  public:
+  const STATE_ID state_id;
+
+  State(STATE_ID state_id = STATE_ID::NO_STATE)
+  : state_id(state_id) {}
+
+  virtual ~State() {}  // Virtual destructor for polymorphism
+
+  virtual void act(Grid& grid, uint8_t x, uint8_t y) {
+    //nuffing
+  }
+};
+
+class Burning : public State {
+public:
+
+  Burning(STATE_ID state_id = STATE_ID::BURNING)
+  : State(state_id) {}
+
+  void act(Grid& grid, uint8_t x, uint8_t y) override {
+    Cell& cell = grid.get(x, y);
+    cell.temperature += 2;
+
+    cell.fuel -= 1;
+    if (cell.fuel == 0) {
+      Cell cell;
+      grid.set(x, y, cell);
+    } 
+  }
+
+  // void colour()
+};
+
+State* no_state = new State();
+
+Burning* burning = new Burning();
+
+State* STATE[3] = {
+  no_state,
+  burning,
+  burning
 };
 
 // std::array<uint8_t, 3> Cell::get_output_colour_from_behaviour() {
-//     COLOURMODE mode = colour_data.colour_mode;
-//     // std::array<uint8_t, 3> colour_return = {0, 0, 0};
+//   COLOURMODE mode = colour_data.colour_mode;
+//   // std::array<uint8_t, 3> colour_return = {0, 0, 0};
 
-//     if (mode == COLOURMODE::SOLID || mode == COLOURMODE::STATIC) {
-//       return {colour_data.base_red, colour_data.base_green, colour_data.base_blue};
-//     } else if (mode == COLOURMODE::BLACKBODY) {
-//       float temperature = temperature;
-//       uint8_t blackbody_constant = 30;
+//   if (mode == COLOURMODE::SOLID || mode == COLOURMODE::STATIC) {
+//     return { colour_data.base_red, colour_data.base_green, colour_data.base_blue };
+//   } else if (mode == COLOURMODE::BLACKBODY) {
+//     float temperature = temperature;
+//     uint8_t blackbody_constant = 30;
 
-//       uint8_t r = colour_data.base_red;
-//       uint8_t g = colour_data.base_green;
-//       uint8_t b = colour_data.base_blue;
+//     uint8_t r = colour_data.base_red;
+//     uint8_t g = colour_data.base_green;
+//     uint8_t b = colour_data.base_blue;
 
-//       uint8_t r_return = static_cast<uint8_t>((std::min(std::max(r + (2.0f * (temperature) / (blackbody_constant)), 0.0f), 254.0f)));
-//       uint8_t g_return = static_cast<uint8_t>((std::min(std::max(g + (0.5f * (temperature) / (blackbody_constant)), 0.0f), 254.0f)));
-//       uint8_t b_return = static_cast<uint8_t>((std::min(std::max(b + (1.0f * (temperature) / (blackbody_constant)), 0.0f), 254.0f)));
+//     uint8_t r_return = static_cast<uint8_t>((std::min(std::max(r + (2.0f * (temperature) / (blackbody_constant)), 0.0f), 254.0f)));
+//     uint8_t g_return = static_cast<uint8_t>((std::min(std::max(g + (0.5f * (temperature) / (blackbody_constant)), 0.0f), 254.0f)));
+//     uint8_t b_return = static_cast<uint8_t>((std::min(std::max(b + (1.0f * (temperature) / (blackbody_constant)), 0.0f), 254.0f)));
 
-//       // std::array<uint8_t, 3> colour_return = {r_return, g_return, b_return};
-//       return {r_return, g_return, b_return};
+//     // std::array<uint8_t, 3> colour_return = {r_return, g_return, b_return};
+//     return { r_return, g_return, b_return };
 //     // } else if (mode == COLOURMODE::TEMPERATURE_DOWN) {
 //     //   float temperature = temperature;
 //     //   float ratio;
 //     //   Updatable* element_data = ELEMENT[static_cast<uint8_t>(element_id)];
-//     }
+//   }
 
-//       if (element_data->next_phase[0] != ELEMENT_ID::NO_ELEMENT and element_data->next_phase[1] != ELEMENT_ID::NO_ELEMENT) {
-//           ratio =  (temperature - element_data->phase_change_temp[0]) / (0.5 * element_data->phase_change_temp[1] - element_data->phase_change_temp[0]);
-//       } else if (element_data->next_phase[0] != ELEMENT_ID::NO_ELEMENT) {
-//           ratio = 1.5 - (element_data->phase_change_temp[0] / temperature);
-//       } else {
-//           ratio = std::max(0.5f, temperature / 200);
-//       }
+//   if (element_data->next_phase[0] != ELEMENT_ID::NO_ELEMENT and element_data->next_phase[1] != ELEMENT_ID::NO_ELEMENT) {
+//     ratio = (temperature - element_data->phase_change_temp[0]) / (0.5 * element_data->phase_change_temp[1] - element_data->phase_change_temp[0]);
+//   } else if (element_data->next_phase[0] != ELEMENT_ID::NO_ELEMENT) {
+//     ratio = 1.5 - (element_data->phase_change_temp[0] / temperature);
+//   } else {
+//     ratio = std::max(0.5f, temperature / 200);
+//   }
 
 
-//       uint8_t r = colour_data.base_red;
-//       uint8_t g = colour_data.base_green;
-//       uint8_t b = colour_data.base_blue;
+//   uint8_t r = colour_data.base_red;
+//   uint8_t g = colour_data.base_green;
+//   uint8_t b = colour_data.base_blue;
 
-//       uint8_t r_return = static_cast<uint8_t>((std::min(std::max((r * ratio), 0.0f), 254.0f)));
-//       uint8_t g_return = static_cast<uint8_t>((std::min(std::max((g * ratio), 0.0f), 254.0f)));
-//       uint8_t b_return = static_cast<uint8_t>((std::min(std::max((b * ratio), 0.0f), 254.0f)));
+//   uint8_t r_return = static_cast<uint8_t>((std::min(std::max((r * ratio), 0.0f), 254.0f)));
+//   uint8_t g_return = static_cast<uint8_t>((std::min(std::max((g * ratio), 0.0f), 254.0f)));
+//   uint8_t b_return = static_cast<uint8_t>((std::min(std::max((b * ratio), 0.0f), 254.0f)));
 
-//       return {r_return, g_return, b_return};
-//     }
+//   return { r_return, g_return, b_return };
 // }
 
 bool Grid::can_swap(uint8_t x1, uint8_t y1, uint8_t x2, uint8_t y2) {
@@ -1304,6 +1331,7 @@ void Grid::perform_pixel_behaviour() {
     cell.temperature += temperature_delta;
 
     if (cell.state_id != STATE_ID::NO_STATE) {
+      STATE[static_cast<uint8_t>(cell.state_id)]->act(*this, x, y);
       // TODO
     }
 
@@ -1379,6 +1407,60 @@ Cell createCellInstance(ELEMENT_ID id,
     ELEMENT_ID::NO_ELEMENT);
 
   return pixel;
+}
+
+void Clone::act(Grid& grid, uint8_t x, uint8_t y) {
+  Cell& cell = grid.get(x, y);
+  auto surrounding_data = grid.check_surroundings(x, y);
+
+  std::array<uint8_t, 8> index_list = { INVALID_BYTE,
+                                        INVALID_BYTE,
+                                        INVALID_BYTE,
+                                        INVALID_BYTE,
+                                        INVALID_BYTE,
+                                        INVALID_BYTE,
+                                        INVALID_BYTE,
+                                        INVALID_BYTE };
+  uint8_t count = 0;
+  uint8_t idx = 0;
+
+
+  if (cell.clone_element == ELEMENT_ID::NO_ELEMENT || cell.clone_element == ELEMENT_ID::CLONE) {
+    // Get clone material
+    for (auto& data : surrounding_data) {
+      if (data.x != INVALID_BYTE && data.cell->element_id != ELEMENT_ID::AIR) {
+        index_list[count++] = idx;
+      }
+      idx++;
+    }
+
+    if (count > 0) {
+      uint8_t random_index = RandomUtils::getRandomByte(0, count);
+
+      ELEMENT_ID clone_element_id = surrounding_data[index_list[random_index]].cell->element_id;
+      cell.clone_element = clone_element_id;
+    }
+  } else {
+    // Spawn Clone Material
+    for (auto& data : surrounding_data) {
+      if (data.x != INVALID_BYTE && data.cell->element_id == ELEMENT_ID::AIR) {
+        index_list[count++] = idx;
+      }
+      idx++;
+    }
+
+    if (count > 0) {
+      uint8_t random_index = RandomUtils::getRandomByte(0, count);
+
+      uint8_t n_x = surrounding_data[index_list[random_index]].x;
+      uint8_t n_y = surrounding_data[index_list[random_index]].y;
+
+      // Particle* element = ELEMENT[0]; // Access element from ELEMENT array
+      // Colour colour_copy(element->colour_data);
+      Cell n_pixel = createCellInstance(cell.clone_element, 23, STATE_ID::NO_STATE, false, 0, 0, 0);
+      grid.set(n_x, n_y, n_pixel);
+    }
+  }
 }
 
 
@@ -1474,6 +1556,15 @@ void setup() {
   Cell destrtuct = createCellInstance(ELEMENT_ID::DESTRUCT);
   space.set(31, 0, destrtuct);
 
+  Cell clone = createCellInstance(ELEMENT_ID::CLONE);
+  space.set(15, 10, clone);
+
+  Cell block = createCellInstance(ELEMENT_ID::BLOCK);
+  space.set(31, 10, block);
+
+  Cell grow = createCellInstance(ELEMENT_ID::GROW, 23, STATE_ID::NO_STATE, true, 0, 100, 3);
+  space.set(28, 6, grow);
+
   space.print();
   // grid.set(20, 14, test);  //This one is in the top right corner
   // grid.set(32, 16, test); //This one is missing from the grid.print
@@ -1499,6 +1590,8 @@ void loop() {
   // if (millis() > 10000) {
   space.print();
   // space.print_t();
+  // space.print_s();
+  // space.print_c();
   // pixels.clear();
   display();
   // }
