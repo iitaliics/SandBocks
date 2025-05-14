@@ -21,7 +21,6 @@ extern Particle* ELEMENT[];
 
 /*
 TODO list:
- - Update colourparams from phase change
  - Particle states
  - Special Elements
 */
@@ -204,6 +203,7 @@ public:
 
   void update_colour_from_phase_change() {
     // TODO: Implement color update based on new element
+
   }
 
 
@@ -468,6 +468,7 @@ public:
       // char str[WIDTH * 2 + 1];
       for (uint8_t j = 0; j < WIDTH; j++) {
         Cell& cell = get(j, HEIGHT - 1 - i);
+
         Serial.print(static_cast<uint8_t>(cell.state_id));
         Serial.print(' ');
         // str[j * 2 + 1] = ' ';
@@ -575,19 +576,22 @@ public:
     if (updatable->next_phase[0] != ELEMENT_ID::NO_ELEMENT && current_temp < updatable->phase_change_temp[0]) {
       cell.element_id = updatable->next_phase[0];
       cell.direction = ELEMENT[static_cast<uint8_t>(updatable->next_phase[0])]->default_direction;
+      cell.colour_data = ELEMENT[static_cast<uint8_t>(updatable->next_phase[0])]->colour_data;
       cell.update_colour_from_phase_change();
       cell.colour_data.set_base_colour();
       return;
     } else if (updatable->next_phase[1] != ELEMENT_ID::NO_ELEMENT && current_temp > updatable->phase_change_temp[1]) {
       cell.element_id = updatable->next_phase[1];
       cell.direction = ELEMENT[static_cast<uint8_t>(updatable->next_phase[1])]->default_direction;
+      cell.colour_data = ELEMENT[static_cast<uint8_t>(updatable->next_phase[1])]->colour_data;
+
       cell.update_colour_from_phase_change();
       cell.colour_data.set_base_colour();
 
       return;
     }
 
-    if (updatable->next_phase[1] == ELEMENT_ID::NO_ELEMENT && cell.flammable && current_temp > updatable->phase_change_temp[1]) {
+    if (updatable->next_phase[1] == ELEMENT_ID::NO_ELEMENT && updatable->phase_change_temp[1] != 0 && current_temp > updatable->phase_change_temp[1]) { // && cell.flammable
       cell.state_id = STATE_ID::BURNING;
     }
 
@@ -838,7 +842,7 @@ public:
 class Grow : public Updatable {
 public:
   Grow(ELEMENT_ID element_id = ELEMENT_ID::GROW, ColourParameters colour_data = ColourParameters({ 0, 0 }, { 150, 250 }, { 10, 0 }, COLOURMODE::STATIC),
-       std::array<float, 2> phase_change_temp = { 0, 300 }, std::array<ELEMENT_ID, 2> next_phase = { ELEMENT_ID::NO_ELEMENT, ELEMENT_ID::NO_ELEMENT },
+       std::array<float, 2> phase_change_temp = { 0, 300.0 }, std::array<ELEMENT_ID, 2> next_phase = { ELEMENT_ID::NO_ELEMENT, ELEMENT_ID::NO_ELEMENT },
        float thermal_conductivity = 0.6, float density = 0.0, DIRECTION default_direction = DIRECTION::DOWN)
     : Updatable(element_id, colour_data, phase_change_temp, next_phase, thermal_conductivity, default_direction, density) {}
 
@@ -1546,6 +1550,75 @@ void unit_test() {
   space.print();
 }
 
+coordinate_return get_touch_input() {
+  std::array<uint16_t, 2> x_range = {200, 3900};
+  std::array<uint16_t, 2> y_range = {780, 3250};
+  coordinate_return coords = {INVALID_BYTE, INVALID_BYTE};
+
+  pinMode(6, OUTPUT);
+  pinMode(15, OUTPUT);
+  pinMode(7, INPUT);
+  pinMode(16, INPUT);
+
+  digitalWrite(6, HIGH);
+  digitalWrite(15, LOW);
+
+  int x_analog = analogRead(7);
+
+  pinMode(6, INPUT);
+  pinMode(15, INPUT);
+  pinMode(7, OUTPUT);
+  pinMode(16, OUTPUT);
+
+  digitalWrite(7, HIGH);
+  digitalWrite(16, LOW);
+
+  int y_analog = analogRead(6);
+
+
+  if (true) { //touch is registered, now convert the a2d to coordinate
+    coords.x = (32 - 32.0 * (x_analog - x_range[0]) / (x_range[1] - x_range[0]));
+    coords.y = (16 - 16.0 * (y_analog - y_range[0]) / (y_range[1] - y_range[0]));
+  }
+
+    Serial.print("X analog: ");
+    Serial.print(x_analog);
+
+    Serial.print(" Y analog: ");
+    Serial.print(y_analog);
+
+    Serial.print(" X return: ");
+    Serial.print(coords.x);
+
+    Serial.print(" Y return: ");
+    Serial.println(coords.y);
+
+    uint8_t x = coords.x;
+    uint8_t y = coords.y;
+
+    ///
+    int16_t num = 0;
+    if (y >= 8) {
+      if (x % 2 != 0) {
+        num = 8 * x + y - 8;
+      } else {
+        num = 8 * x + (7 - y) + 8;
+      }
+    } else {
+      if (x % 2 == 0) {
+        num = 256 + 8 * (31 - x) + (7 - (y % 8));
+      } else {
+        num = 256 + 8 * (31 - x) + (y % 8);
+      }
+    }
+    
+    pixels.clear();
+    pixels.setPixelColor(num, pixels.Color(255, 255, 255));
+    pixels.show();  // Send the updated pixel colors to the hardware.
+    ///
+
+    return coords;
+}
 
 void setup() {
   // put your setup code here, to run once:
@@ -1575,24 +1648,34 @@ void setup() {
 void loop() {
   // Serial.println("TEST");
 
-  Cell test = createCellInstance(ELEMENT_ID::WATER);
-  space.set(2, 4, test);
+  // Cell test = createCellInstance(ELEMENT_ID::WATER);
+  // space.set(2, 4, test);
 
-  Cell rock = createCellInstance(ELEMENT_ID::LAVA, 10000.0);
-  space.set(31, 14, rock);
+  // Cell rock = createCellInstance(ELEMENT_ID::LAVA, 10000.0);
+  // space.set(31, 14, rock);
 
-  space.perform_pixel_behaviour();
+  // space.perform_pixel_behaviour();
+  // display();
 
+  get_touch_input();
 
   // grid.print();
   // unit_test();
   // put your main code here, to run repeatedly:
   // if (millis() > 10000) {
-  space.print();
+  // space.print();
   // space.print_t();
   // space.print_s();
   // space.print_c();
-  // pixels.clear();
-  display();
+  // 
+  // Cell& shit = space.get(0, 15);
+  // Particle* current_element = getElementDataFromCell(&shit);
+  // Serial.print("1: ");
+  // Serial.println(static_cast<uint8_t>(shit.state_id));
+  // if (millis() > 3000) {
+  //   space.perform_pixel_behaviour(); 
+  // }
+  // Serial.print("2: ");
+  // Serial.println(static_cast<uint8_t>(shit.state_id));
   // }
 }
