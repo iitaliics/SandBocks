@@ -64,6 +64,10 @@ constexpr int ELEMENT_COUNT = static_cast<uint8_t>(ELEMENT_ID::ELEMENT_ID_ENUM_C
 
 constexpr uint8_t INVALID_BYTE = 255;
 
+constexpr uint8_t TOUCH_SAMPLE_COUNT = 5;
+constexpr uint8_t TOUCH_STABILITY_THRESHOLD = 100;
+constexpr uint8_t TOUCH_SAMPLE_INTERVAL_MS = 2;
+
 enum class STATE_ID {
   NO_STATE,
   BURNING,
@@ -1413,6 +1417,27 @@ Cell createCellInstance(ELEMENT_ID id,
   return pixel;
 }
 
+Cell element_pallet(ELEMENT_ID element_id) {
+  Cell ret;
+  if (element_id == ELEMENT_ID::STEAM) {
+    ret = createCellInstance(element_id, 150);
+  } else if (element_id == ELEMENT_ID::SNOW) {
+    ret = createCellInstance(element_id, -25);
+  } else if (element_id == ELEMENT_ID::ICE) {
+    ret = createCellInstance(element_id, -50);
+  } else if (element_id == ELEMENT_ID::FIRE) {
+    ret = createCellInstance(element_id, 800);
+  } else if (element_id == ELEMENT_ID::MOLTEN_METAL) {
+    ret = createCellInstance(element_id, 2000);
+  } else if (element_id == ELEMENT_ID::GROW) {
+    ret = createCellInstance(element_id, 23, STATE_ID::NO_STATE, true, 0, 100, 3);
+  } else {
+    // Default behaviour
+    ret = createCellInstance(element_id);
+  }
+  return ret;
+}
+
 void Clone::act(Grid& grid, uint8_t x, uint8_t y) {
   Cell& cell = grid.get(x, y);
   auto surrounding_data = grid.check_surroundings(x, y);
@@ -1467,6 +1492,69 @@ void Clone::act(Grid& grid, uint8_t x, uint8_t y) {
   }
 }
 
+
+class TouchSampler {
+public:
+  TouchSampler(uint8_t readPin, uint8_t outHighPin, uint8_t outLowPin, uint8_t falseReadPin, std::array<uint16_t, 2> range, uint8_t axisSize)
+    : readPin(readPin), outHighPin(outHighPin), outLowPin(outLowPin), falseReadPin(falseReadPin), range(range), axisSize(axisSize) {
+    index = 0;
+    lastSampleTime = 0;
+    sampleCount = 0;
+    std::fill(samples.begin(), samples.end(), 0);
+  }
+
+  void preparePins() {
+    pinMode(outHighPin, OUTPUT);
+    pinMode(outLowPin, OUTPUT);
+    pinMode(readPin, INPUT);
+    pinMode(falseReadPin, INPUT);
+    digitalWrite(outHighPin, HIGH);
+    digitalWrite(outLowPin, LOW);
+  }
+
+  void readSignal() {
+    preparePins();
+    samples[index] = analogRead(readPin);
+    index = (index + 1) % TOUCH_SAMPLE_COUNT;
+    // if (sampleCount < TOUCH_SAMPLE_COUNT) sampleCount++;
+  }
+
+  bool isStableAndInRange() const {
+    int sum = 0;
+    for (int s : samples) sum += s;
+    int avg = sum / TOUCH_SAMPLE_COUNT;
+
+    int maxDev = 0;
+    for (int s : samples) {
+      int dev = abs(s - avg);
+      if (dev > maxDev) maxDev = dev;
+    }
+
+    return (avg >= range[0] && avg <= range[1] && maxDev <= TOUCH_STABILITY_THRESHOLD);
+  }
+
+  uint16_t getAverage() const {
+    int sum = 0;
+    for (int s : samples) sum += s;
+    return sum / TOUCH_SAMPLE_COUNT;
+  }
+
+  uint8_t getCoord() const {
+    return (axisSize - static_cast<float>(axisSize) * (getAverage() - range[0]) / (range[1] - range[0]));
+  }
+
+private:
+  uint8_t readPin, outHighPin, outLowPin, falseReadPin;
+  std::array<uint16_t, 2> range;
+  uint8_t axisSize;
+  std::array<uint16_t, TOUCH_SAMPLE_COUNT> samples;
+  int index;
+  int sampleCount;
+  unsigned long lastSampleTime;
+};
+
+TouchSampler xSampler(7, 6, 15, 16, {200, 3900}, 32);
+TouchSampler ySampler(6, 7, 16, 15, {780, 3250}, 16);
 
 Grid space;
 
@@ -1550,74 +1638,78 @@ void unit_test() {
   space.print();
 }
 
+coordinate_return get_touch_routine() {
+  coordinate_return ret = {INVALID_BYTE, INVALID_BYTE};
+
+  xSampler.readSignal();
+  if (xSampler.isStableAndInRange()) {
+    ret.x = xSampler.getCoord();
+  }
+  
+  ySampler.readSignal();
+  if (ySampler.isStableAndInRange()) {
+    ret.y = ySampler.getCoord();
+  }
+
+  return ret;
+}
+
 coordinate_return get_touch_input() {
   std::array<uint16_t, 2> x_range = {200, 3900};
   std::array<uint16_t, 2> y_range = {780, 3250};
   coordinate_return coords = {INVALID_BYTE, INVALID_BYTE};
 
-  pinMode(6, OUTPUT);
-  pinMode(15, OUTPUT);
-  pinMode(7, INPUT);
-  pinMode(16, INPUT);
+  
 
-  digitalWrite(6, HIGH);
-  digitalWrite(15, LOW);
+  coords = get_touch_routine();
 
-  int x_analog = analogRead(7);
+  // Serial.print("X analog: ");
+  // Serial.print(x_analog);
 
-  pinMode(6, INPUT);
-  pinMode(15, INPUT);
-  pinMode(7, OUTPUT);
-  pinMode(16, OUTPUT);
+  // Serial.print(" Y analog: ");
+  // Serial.print(y_analog);
 
-  digitalWrite(7, HIGH);
-  digitalWrite(16, LOW);
+  Serial.print(" X return: ");
+  Serial.print(coords.x);
 
-  int y_analog = analogRead(6);
+  Serial.print(" Y return: ");
+  Serial.println(coords.y);
 
+  // Exit early as it's not registering a proper touch
+  if (coords.x == INVALID_BYTE || coords.y == INVALID_BYTE) return coords;
 
-  if (true) { //touch is registered, now convert the a2d to coordinate
-    coords.x = (32 - 32.0 * (x_analog - x_range[0]) / (x_range[1] - x_range[0]));
-    coords.y = (16 - 16.0 * (y_analog - y_range[0]) / (y_range[1] - y_range[0]));
-  }
+  uint8_t x = coords.x;
+  uint8_t y = coords.y;
 
-    Serial.print("X analog: ");
-    Serial.print(x_analog);
-
-    Serial.print(" Y analog: ");
-    Serial.print(y_analog);
-
-    Serial.print(" X return: ");
-    Serial.print(coords.x);
-
-    Serial.print(" Y return: ");
-    Serial.println(coords.y);
-
-    uint8_t x = coords.x;
-    uint8_t y = coords.y;
-
-    ///
-    int16_t num = 0;
-    if (y >= 8) {
-      if (x % 2 != 0) {
-        num = 8 * x + y - 8;
-      } else {
-        num = 8 * x + (7 - y) + 8;
-      }
+  ///
+  int16_t num = 0;
+  if (y >= 8) {
+    if (x % 2 != 0) {
+      num = 8 * x + y - 8;
     } else {
-      if (x % 2 == 0) {
-        num = 256 + 8 * (31 - x) + (7 - (y % 8));
-      } else {
-        num = 256 + 8 * (31 - x) + (y % 8);
-      }
+      num = 8 * x + (7 - y) + 8;
     }
-    
-    pixels.clear();
-    pixels.setPixelColor(num, pixels.Color(255, 255, 255));
-    pixels.show();  // Send the updated pixel colors to the hardware.
-    ///
+  } else {
+    if (x % 2 == 0) {
+      num = 256 + 8 * (31 - x) + (7 - (y % 8));
+    } else {
+      num = 256 + 8 * (31 - x) + (y % 8);
+    }
+  }
+  
+  // pixels.clear();
+  pixels.setPixelColor(num, pixels.Color(255, 255, 255));
+  pixels.show();  // Send the updated pixel colors to the hardware.
 
-    return coords;
+  return coords;
+}
+
+void handle_draw(ELEMENT_ID selected_element_id) {
+  coordinate_return touch_data = get_touch_input();
+  if (touch_data.x != INVALID_BYTE && touch_data.y != INVALID_BYTE) {
+    Cell cell = element_pallet(selected_element_id);
+    space.draw(touch_data.x, touch_data.y, cell, 0.75);
+  }
 }
 
 void setup() {
@@ -1653,11 +1745,18 @@ void loop() {
 
   // Cell rock = createCellInstance(ELEMENT_ID::LAVA, 10000.0);
   // space.set(31, 14, rock);
+  handle_draw(ELEMENT_ID::SAND);
 
-  // space.perform_pixel_behaviour();
-  // display();
+  space.perform_pixel_behaviour();
+  display();
 
-  get_touch_input();
+  // get_touch_input();
+
+  // coordinate_return free = get_touch_routine();
+  // Serial.print("X: ");
+  // Serial.print(free.x);
+  // Serial.print(" Y: ");
+  // Serial.println(free.y);
 
   // grid.print();
   // unit_test();
