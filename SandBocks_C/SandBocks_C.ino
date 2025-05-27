@@ -47,11 +47,11 @@ enum class ELEMENT_ID {
   DESTRUCT,
   CLONE,
   GROW,
-  COLD,
-  HOT,
-  CONDUCT,
-  FLIP,
-  BUG,
+  // COLD,
+  // HOT,
+  // CONDUCT,
+  // FLIP,
+  // BUG,
 
   NO_ELEMENT,
 
@@ -60,7 +60,7 @@ enum class ELEMENT_ID {
 
 const uint8_t WIDTH = 32;
 const uint8_t HEIGHT = 16;
-constexpr int ELEMENT_COUNT = static_cast<uint8_t>(ELEMENT_ID::ELEMENT_ID_ENUM_COUNT);
+constexpr int ELEMENT_COUNT = static_cast<uint8_t>(ELEMENT_ID::ELEMENT_ID_ENUM_COUNT) - 1;
 
 constexpr uint8_t INVALID_BYTE = 255;
 
@@ -106,12 +106,13 @@ struct coordinate_return {
 };
 
 struct ColourParameters {
-  std::array<uint8_t, 2> param_red;
-  std::array<uint8_t, 2> param_green;
-  std::array<uint8_t, 2> param_blue;
+  using param_t = std::array<uint8_t, 2>;
+  param_t param_red;
+  param_t param_green;
+  param_t param_blue;
   COLOURMODE colour_mode = COLOURMODE::STATIC;
 
-  ColourParameters(std::array<uint8_t, 2> r, std::array<uint8_t, 2> g, std::array<uint8_t, 2> b, COLOURMODE mode)
+  ColourParameters(param_t r, param_t g, param_t b, COLOURMODE mode)
     : param_red(r), param_green(g), param_blue(b), colour_mode(mode) {}
 };
 
@@ -151,9 +152,9 @@ bool getRandomBool(float trueProbability = 0.5f) {
 // classes
 class Colour {
 public:
-  std::array<uint8_t, 2> param_red;
-  std::array<uint8_t, 2> param_green;
-  std::array<uint8_t, 2> param_blue;
+  ColourParameters::param_t param_red;
+  ColourParameters::param_t param_green;
+  ColourParameters::param_t param_blue;
 
   uint8_t base_red;
   uint8_t base_green;
@@ -207,7 +208,6 @@ public:
 
   void update_colour_from_phase_change() {
     // TODO: Implement color update based on new element
-
   }
 
 
@@ -595,7 +595,7 @@ public:
       return;
     }
 
-    if (updatable->next_phase[1] == ELEMENT_ID::NO_ELEMENT && updatable->phase_change_temp[1] != 0 && current_temp > updatable->phase_change_temp[1]) { // && cell.flammable
+    if (updatable->next_phase[1] == ELEMENT_ID::NO_ELEMENT && updatable->phase_change_temp[1] != 0 && current_temp > updatable->phase_change_temp[1]) {  // && cell.flammable
       cell.state_id = STATE_ID::BURNING;
     }
 
@@ -1129,11 +1129,11 @@ Particle* ELEMENT[ELEMENT_COUNT] = {
 
 //States data
 class State {
-  public:
+public:
   const STATE_ID state_id;
 
   State(STATE_ID state_id = STATE_ID::NO_STATE)
-  : state_id(state_id) {}
+    : state_id(state_id) {}
 
   virtual ~State() {}  // Virtual destructor for polymorphism
 
@@ -1146,7 +1146,7 @@ class Burning : public State {
 public:
 
   Burning(STATE_ID state_id = STATE_ID::BURNING)
-  : State(state_id) {}
+    : State(state_id) {}
 
   void act(Grid& grid, uint8_t x, uint8_t y) override {
     Cell& cell = grid.get(x, y);
@@ -1156,7 +1156,7 @@ public:
     if (cell.fuel == 0) {
       Cell cell;
       grid.set(x, y, cell);
-    } 
+    }
   }
 
   // void colour()
@@ -1553,8 +1553,8 @@ private:
   unsigned long lastSampleTime;
 };
 
-TouchSampler xSampler(7, 6, 15, 16, {200, 3900}, 32);
-TouchSampler ySampler(6, 7, 16, 15, {780, 3250}, 16);
+TouchSampler xSampler(7, 6, 15, 16, { 200, 3900 }, 32);
+TouchSampler ySampler(6, 7, 16, 15, { 780, 3250 }, 16);
 
 Grid space;
 
@@ -1639,13 +1639,13 @@ void unit_test() {
 }
 
 coordinate_return get_touch_routine() {
-  coordinate_return ret = {INVALID_BYTE, INVALID_BYTE};
+  coordinate_return ret = { INVALID_BYTE, INVALID_BYTE };
 
   xSampler.readSignal();
   if (xSampler.isStableAndInRange()) {
     ret.x = xSampler.getCoord();
   }
-  
+
   ySampler.readSignal();
   if (ySampler.isStableAndInRange()) {
     ret.y = ySampler.getCoord();
@@ -1655,11 +1655,11 @@ coordinate_return get_touch_routine() {
 }
 
 coordinate_return get_touch_input() {
-  std::array<uint16_t, 2> x_range = {200, 3900};
-  std::array<uint16_t, 2> y_range = {780, 3250};
-  coordinate_return coords = {INVALID_BYTE, INVALID_BYTE};
+  std::array<uint16_t, 2> x_range = { 200, 3900 };
+  std::array<uint16_t, 2> y_range = { 780, 3250 };
+  coordinate_return coords = { INVALID_BYTE, INVALID_BYTE };
 
-  
+
 
   coords = get_touch_routine();
 
@@ -1696,7 +1696,7 @@ coordinate_return get_touch_input() {
       num = 256 + 8 * (31 - x) + (y % 8);
     }
   }
-  
+
   // pixels.clear();
   pixels.setPixelColor(num, pixels.Color(255, 255, 255));
   pixels.show();  // Send the updated pixel colors to the hardware.
@@ -1712,6 +1712,155 @@ void handle_draw(ELEMENT_ID selected_element_id) {
   }
 }
 
+std::array<Cell, ELEMENT_COUNT> palette_elements;
+
+class Palette {
+public:
+  uint8_t width;
+  uint8_t row_space;
+  uint16_t hold_counter = 250;
+  bool visible = false; // THIS LINE
+  ELEMENT_ID selected = ELEMENT_ID::SAND;
+  
+
+  Palette(uint8_t width, uint8_t row_space)
+    : width(width), row_space(row_space) {
+    this->setup();
+  }
+
+  void setup() {
+    // for (auto& element : ELEMENT) {
+    //   palette_elements[static_cast<uint8_t>(element.element_id)] = element_pallet(element->element_id);
+    //   palette_elements[static_cast<uint8_t>(element.element_id)].colour_data.set_base_colour();
+    // }
+
+    for (int i = 0; i < ELEMENT_COUNT; i++) { //TODO replace with ELEMENT_COUNT
+      ELEMENT_ID elem = static_cast<ELEMENT_ID>(i);
+      palette_elements[i] = element_pallet(elem);
+      Serial.println(palette_elements[i].colour_data.base_red);
+      
+      // palette_elements[i].colour_data.set_base_colour();
+    }
+    // Default: do nothing
+  }
+
+  void display_circle(uint8_t touch_x, uint8_t touch_y, uint8_t radius) {
+    // uint8_t x, y; //inputs
+    for (uint8_t x = 0; x < 32; x++) {
+      for (uint8_t y = 0; y < 16; y++) {
+
+        int16_t num = 0;
+        if (y >= 8) {
+          if (x % 2 != 0) {
+            num = 8 * x + y - 8;
+          } else {
+            num = 8 * x + (7 - y) + 8;
+          }
+        } else {
+          if (x % 2 == 0) {
+            num = 256 + 8 * (31 - x) + (7 - (y % 8));
+          } else {
+            num = 256 + 8 * (31 - x) + (y % 8);
+          }
+        }
+
+        if ((std::pow((x - touch_x), 2) + std::pow((y - touch_y), 2)) > std::pow(radius, 2) || ((std::pow((x - touch_x), 2) + std::pow((y - touch_y), 2)) < std::pow(radius - 1, 2))) {
+          pixels.setPixelColor(num, pixels.Color(0, 0, 0));
+          continue;
+        }
+
+        // Update colours for relevant colours TODO
+
+        pixels.setPixelColor(num, pixels.Color(255, 255, 255));
+      }
+    }
+    // pixels.show();
+  };
+
+  void select_routine() {
+    
+    // Find closest cell,
+    coordinate_return coords = get_touch_routine();
+
+    // Close circle in using timer
+    if (coords.x != INVALID_BYTE && coords.y != INVALID_BYTE) { //if touch is registered
+     
+      uint8_t radius = 16;
+      
+      hold_counter -= 5;
+      
+
+      if (hold_counter <= 0) {
+
+        // Need to go from x, y to the element index
+        for (auto& element : ELEMENT) {
+          if (coords.x == ((static_cast<uint8_t>(element->element_id) % width) * (32 / width) + (32 / width) / 2) &&
+              coords.y == ((static_cast<uint8_t>(element->element_id) / width) * (row_space) + (16 / row_space) / 2)) {
+            if (element->element_id != ELEMENT_ID::NO_ELEMENT) {
+              selected = element->element_id;
+              visible = false;
+            }
+          }
+        }
+        // selected = ELEMENT_ID::WATER;
+        // visible = false;
+        hold_counter = 250;
+      }
+      display_circle(coords.x, coords.y, 1 + radius * (hold_counter / 250.0));
+      
+    } else {
+      hold_counter = 250;
+    }
+    // Close menu when finished and return to game.
+  }
+
+  void display() {
+    uint8_t x, y;
+    for (auto& element : ELEMENT) {
+      // Serial.println(());
+      // Serial.println((static_cast<uint8_t>(element->element_id)));
+      
+      // x = (static_cast<uint8_t>(element->element_id) * 32 / width) % width;
+      // y = (static_cast<uint8_t>(element->element_id) * 32 / width) / width;
+
+      x = ((static_cast<uint8_t>(element->element_id) % width) * (32 / width) + (32 / width) / 2) ;
+      y = 16 - ((static_cast<uint8_t>(element->element_id) / width) * (row_space) + (16 / row_space) / 2) ;
+      int16_t num = 0;
+      if (y >= 8) {
+        if (x % 2 != 0) {
+          num = 8 * x + y - 8;
+        } else {
+          num = 8 * x + (7 - y) + 8;
+        }
+      } else {
+        if (x % 2 == 0) {
+          num = 256 + 8 * (31 - x) + (7 - (y % 8));
+        } else {
+          num = 256 + 8 * (31 - x) + (y % 8);
+        }
+      }
+
+      // Update colours for relevant colours TODO
+
+      uint8_t red = palette_elements[static_cast<uint8_t>(element->element_id)].colour_data.base_red;
+      uint8_t green = palette_elements[static_cast<uint8_t>(element->element_id)].colour_data.base_green;
+      uint8_t blue = palette_elements[static_cast<uint8_t>(element->element_id)].colour_data.base_blue;
+
+      pixels.setPixelColor(num, pixels.Color(red, green, blue));
+    }
+
+  };
+
+  void routine() {
+    select_routine();
+    display();
+    pixels.show();
+    pixels.clear();
+  };
+};
+
+Palette* palette;
+
 void setup() {
   // put your setup code here, to run once:
   Serial.begin(460800);
@@ -1721,8 +1870,8 @@ void setup() {
   Cell destrtuct = createCellInstance(ELEMENT_ID::DESTRUCT);
   space.set(31, 0, destrtuct);
 
-  Cell clone = createCellInstance(ELEMENT_ID::CLONE);
-  space.set(15, 10, clone);
+  // Cell clone = createCellInstance(ELEMENT_ID::CLONE);
+  // space.set(15, 10, clone);
 
   Cell block = createCellInstance(ELEMENT_ID::BLOCK);
   space.set(31, 10, block);
@@ -1730,51 +1879,26 @@ void setup() {
   Cell grow = createCellInstance(ELEMENT_ID::GROW, 23, STATE_ID::NO_STATE, true, 0, 100, 3);
   space.set(28, 6, grow);
 
+
+
   space.print();
   // grid.set(20, 14, test);  //This one is in the top right corner
   // grid.set(32, 16, test); //This one is missing from the grid.print
   // grid.set(0, 0, test); //This one is missing from the grid.print
+  palette = new Palette(5, 3);
   pixels.begin();
 }
 
 void loop() {
-  // Serial.println("TEST");
+  if ((millis() / 10000) % 30 == 4) {
+    palette->visible = true;
+  }
 
-  // Cell test = createCellInstance(ELEMENT_ID::WATER);
-  // space.set(2, 4, test);
-
-  // Cell rock = createCellInstance(ELEMENT_ID::LAVA, 10000.0);
-  // space.set(31, 14, rock);
-  handle_draw(ELEMENT_ID::SAND);
-
-  space.perform_pixel_behaviour();
-  display();
-
-  // get_touch_input();
-
-  // coordinate_return free = get_touch_routine();
-  // Serial.print("X: ");
-  // Serial.print(free.x);
-  // Serial.print(" Y: ");
-  // Serial.println(free.y);
-
-  // grid.print();
-  // unit_test();
-  // put your main code here, to run repeatedly:
-  // if (millis() > 10000) {
-  // space.print();
-  // space.print_t();
-  // space.print_s();
-  // space.print_c();
-  // 
-  // Cell& shit = space.get(0, 15);
-  // Particle* current_element = getElementDataFromCell(&shit);
-  // Serial.print("1: ");
-  // Serial.println(static_cast<uint8_t>(shit.state_id));
-  // if (millis() > 3000) {
-  //   space.perform_pixel_behaviour(); 
-  // }
-  // Serial.print("2: ");
-  // Serial.println(static_cast<uint8_t>(shit.state_id));
-  // }
+  if (palette->visible) {
+    palette->routine();
+  } else {
+    space.perform_pixel_behaviour();
+    handle_draw(palette->selected);
+    display();
+  }
 }
