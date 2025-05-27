@@ -10,3 +10,7 @@ Written in python, my first attempt (SANDbOCKS_v1.py) is really shitty and unopt
 Second attempt (sandbox.py) is going well, but I have tested and it's still too slow for my microcontroller with MicroPython. I will continue to develop this version into a polished state. It still uses Pygame for display purposes, as the physical display isn't capable of interfacing yet. But currently to draw each element you have to hardcode it either in or before the main loop. I will likely add mouse support, but a much simpler version considering a touch screen only boolean sense of touch (reliably). Some features will be missing from this version too as I deem them unnecessary to complete the project. If I really need things like Teleport or Barriers I can add them in later (begrudgingly).
 
 The plan is lastly to convert the polished game to C or C++ to make this speedy code for an ESP32-S3 microcontroller. This will be used to light up a grid of LED lights per pixel to have a physical interractable decoration with a touch screen.
+
+WORK IN PROGRESS demonstration video!
+https://github.com/user-attachments/assets/2aef457a-c82c-4fb9-9e00-6251c4107629
+
